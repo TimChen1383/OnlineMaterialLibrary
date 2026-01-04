@@ -89,7 +89,7 @@ function ShaderMesh({ meshType, userCode, onError }) {
       let errorMsg = log
       const lineMatch = log.match(/ERROR: \d+:(\d+):(.*)/)
       if (lineMatch) {
-        const line = parseInt(lineMatch[1]) - 15 // Offset for wrapper code
+        const line = parseInt(lineMatch[1]) - 22 // Offset for wrapper code (user code starts at line 23)
         const msg = lineMatch[2].trim()
         errorMsg = `Line ${line > 0 ? line : '?'}: ${msg}`
       }
