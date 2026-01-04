@@ -1,0 +1,38 @@
+================================================================================
+Request
+================================================================================
+I want to create a website which can demostrate shader in real-time.
+Ideally it's like the mixture of SketchFab and ShaderToy.
+However no need to be as complex as SketchFab or ShaderToy.
+
+It's like a library. 
+User can choose to demostrate the material on sphere, cube or plane mesh.
+User can rotate the mesh around to see the shader details.
+I guess this part will be done through three.js.
+
+About the shader, no need to be as complex as ShaderToy.
+No custom fancy function.
+Just let user input GLSL code and we can see the result in realtime on the chosen mesh.
+If user is happy with the result, he can choose to export the code as GLSL or HLSL.
+
+The idea is came from my previous Unreal Engine Material Library project.
+I collected a lot of cool material together and add the screenshots of the material to the github page.
+Although it's called library, but I can't see the result in real-time.
+Becuse it's just an image.
+Also if the material has some moving effect, we can't see the effect through single image as well.
+
+Unreal Engine's material is written in HLSL.
+As I know, for better performance and demostation on website, we should use WebGL and GLSL.
+That's the reason we need a converter.
+We demostrate the shader effect in GLSL on web browser.
+We can choose to export the code as HLSL and user can use it directly inside Unreal Engine.
+I want the result in GLSL to be as similar as possible in HLSL.
+
+I have heard that tool like "SPIRV-Cross" and "Slang" from Khronos may be the solution of converter.
+Also there is something called "Monaco Editor" can help me on code input.
+
+As I don't know much about creating this kind of website, can you give me a plan first?
+Convert my request into a technical plan.
+Is there any templates/tools/packages that realted to this request?
+No need to start from scratch.
+Achieve the goal is more important than show off the technical skill.
