@@ -1,5 +1,5 @@
-// GLSL to HLSL converter
-export function glslToHlsl(glslCode) {
+// Base HLSL conversions (shared between HLSL and Unreal HLSL)
+function applyBaseHlslConversions(glslCode) {
   let hlsl = glslCode;
 
   // Type conversions
@@ -38,6 +38,13 @@ export function glslToHlsl(glslCode) {
   hlsl = hlsl.replace(/\bgl_FragColor\b/g, 'output.color');
   hlsl = hlsl.replace(/\bgl_Position\b/g, 'output.position');
 
+  return hlsl;
+}
+
+// GLSL to HLSL converter
+export function glslToHlsl(glslCode) {
+  let hlsl = applyBaseHlslConversions(glslCode);
+
   // Add HLSL header comment
   hlsl = `// Converted from GLSL to HLSL
 // Note: Manual adjustments may be required for:
@@ -46,6 +53,43 @@ export function glslToHlsl(glslCode) {
 // - Constant buffers (cbuffer)
 
 ${hlsl}`;
+
+  return hlsl;
+}
+
+// GLSL to Unreal HLSL converter (for Custom Node)
+export function glslToUnrealHlsl(glslCode) {
+  let hlsl = applyBaseHlslConversions(glslCode);
+
+  // Unreal-specific: expand single-argument vector constructors to full arguments
+  // float2(x) -> float2(x, x)
+  hlsl = hlsl.replace(/\bfloat2\s*\(\s*([^,)]+)\s*\)/g, (match, arg) => {
+    // Check if it's already a full constructor (has comma)
+    if (arg.includes(',')) return match;
+    return `float2(${arg.trim()}, ${arg.trim()})`;
+  });
+  // float3(x) -> float3(x, x, x)
+  hlsl = hlsl.replace(/\bfloat3\s*\(\s*([^,)]+)\s*\)/g, (match, arg) => {
+    if (arg.includes(',')) return match;
+    return `float3(${arg.trim()}, ${arg.trim()}, ${arg.trim()})`;
+  });
+  // float4(x) -> float4(x, x, x, x)
+  hlsl = hlsl.replace(/\bfloat4\s*\(\s*([^,)]+)\s*\)/g, (match, arg) => {
+    if (arg.includes(',')) return match;
+    return `float4(${arg.trim()}, ${arg.trim()}, ${arg.trim()}, ${arg.trim()})`;
+  });
+
+  // Unreal-specific: convert matrix multiplication operators to mul()
+  // vec *= mat -> vec = mul(vec, mat)
+  hlsl = hlsl.replace(/(\w+)\s*\*=\s*(\w+)\s*;/g, (match, vec, mat) => {
+    // Only convert if the second operand looks like a matrix variable (typically single letter or ends with 'm' or 'mat')
+    // We'll be conservative and convert all *= that might be matrix ops
+    return `${vec} = mul(${vec}, ${mat});`;
+  });
+
+  // Unreal-specific: convert finalColor assignment to return statement
+  // finalColor = x; -> return x;
+  hlsl = hlsl.replace(/\bfinalColor\s*=\s*([^;]+);/g, 'return $1;');
 
   return hlsl;
 }

@@ -1,29 +1,17 @@
 import { useState } from 'react'
-import { glslToHlsl } from '../utils/shaderConverter'
-import { VERTEX_SHADER, wrapUserCode } from './Viewer'
+import { glslToHlsl, glslToUnrealHlsl } from '../utils/shaderConverter'
 
 export default function ExportModal({ userCode, onClose }) {
   const [activeTab, setActiveTab] = useState('glsl')
-  const [codeType, setCodeType] = useState('fragment') // 'fragment', 'vertex', 'userOnly'
   const [copied, setCopied] = useState(false)
 
   const getCode = () => {
-    let code = ''
+    const code = userCode
 
-    if (codeType === 'userOnly') {
-      // Just the user's code snippet
-      code = userCode
-    } else if (codeType === 'vertex') {
-      // Full vertex shader
-      code = VERTEX_SHADER.trim()
-    } else {
-      // Full fragment shader
-      code = wrapUserCode(userCode).trim()
-    }
-
-    // Convert to HLSL if needed
     if (activeTab === 'hlsl') {
       return glslToHlsl(code)
+    } else if (activeTab === 'unrealHlsl') {
+      return glslToUnrealHlsl(code)
     }
     return code
   }
@@ -40,9 +28,8 @@ export default function ExportModal({ userCode, onClose }) {
 
   const handleDownload = () => {
     const code = getCode()
-    const ext = activeTab === 'hlsl' ? 'hlsl' : 'glsl'
-    const typeNames = { fragment: 'fragment', vertex: 'vertex', userOnly: 'material' }
-    const filename = `shader_${typeNames[codeType]}.${ext}`
+    const ext = activeTab === 'glsl' ? 'glsl' : 'hlsl'
+    const filename = `shader_material.${ext}`
     const blob = new Blob([code], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -65,38 +52,19 @@ export default function ExportModal({ userCode, onClose }) {
               className={`modal-tab ${activeTab === 'glsl' ? 'active' : ''}`}
               onClick={() => setActiveTab('glsl')}
             >
-              GLSL (WebGL)
+              GLSL
             </button>
             <button
               className={`modal-tab ${activeTab === 'hlsl' ? 'active' : ''}`}
               onClick={() => setActiveTab('hlsl')}
             >
+              HLSL
+            </button>
+            <button
+              className={`modal-tab ${activeTab === 'unrealHlsl' ? 'active' : ''}`}
+              onClick={() => setActiveTab('unrealHlsl')}
+            >
               HLSL (Unreal)
-            </button>
-          </div>
-        </div>
-
-        {/* Code type selection */}
-        <div className="modal-section">
-          <label>Export:</label>
-          <div className="modal-tabs">
-            <button
-              className={`modal-tab ${codeType === 'userOnly' ? 'active' : ''}`}
-              onClick={() => setCodeType('userOnly')}
-            >
-              Code Only
-            </button>
-            <button
-              className={`modal-tab ${codeType === 'fragment' ? 'active' : ''}`}
-              onClick={() => setCodeType('fragment')}
-            >
-              Full Fragment
-            </button>
-            <button
-              className={`modal-tab ${codeType === 'vertex' ? 'active' : ''}`}
-              onClick={() => setCodeType('vertex')}
-            >
-              Full Vertex
             </button>
           </div>
         </div>
