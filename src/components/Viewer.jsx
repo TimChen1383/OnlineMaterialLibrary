@@ -72,38 +72,38 @@ function ShaderMesh({ meshType, userCode, onError }) {
   }, [uniforms])
 
   const material = useMemo(() => {
-    try {
-      const fragmentShader = wrapUserCode(userCode)
-      const mat = new THREE.ShaderMaterial({
-        uniforms,
-        vertexShader: VERTEX_SHADER,
-        fragmentShader,
-        side: THREE.DoubleSide
-      })
+    const fragmentShader = wrapUserCode(userCode)
 
-      // Force shader compilation to catch errors early
-      const tempScene = new THREE.Scene()
-      const tempMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat)
-      tempScene.add(tempMesh)
-      gl.compile(tempScene, new THREE.Camera())
+    // Manually compile shader to check for errors
+    const glContext = gl.getContext()
+    const shader = glContext.createShader(glContext.FRAGMENT_SHADER)
+    glContext.shaderSource(shader, fragmentShader)
+    glContext.compileShader(shader)
 
-      onError(null)
-      return mat
-    } catch (err) {
-      // Parse WebGL error message to be more readable
-      let errorMsg = err.message || 'Unknown shader error'
+    const success = glContext.getShaderParameter(shader, glContext.COMPILE_STATUS)
+    const log = glContext.getShaderInfoLog(shader)
+    glContext.deleteShader(shader)
 
-      // Extract useful info from WebGL errors
-      const lineMatch = errorMsg.match(/ERROR: \d+:(\d+):(.*)/)
+    if (!success && log) {
+      // Parse error message to adjust line numbers
+      let errorMsg = log
+      const lineMatch = log.match(/ERROR: \d+:(\d+):(.*)/)
       if (lineMatch) {
         const line = parseInt(lineMatch[1]) - 15 // Offset for wrapper code
         const msg = lineMatch[2].trim()
         errorMsg = `Line ${line > 0 ? line : '?'}: ${msg}`
       }
-
       onError(errorMsg)
       return new THREE.MeshBasicMaterial({ color: 0x331111 })
     }
+
+    onError(null)
+    return new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: VERTEX_SHADER,
+      fragmentShader,
+      side: THREE.DoubleSide
+    })
   }, [userCode, uniforms, onError, gl])
 
   useFrame((state) => {
