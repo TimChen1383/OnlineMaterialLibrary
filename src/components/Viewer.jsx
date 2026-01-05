@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect } from 'react'
+import { useRef, useMemo, useEffect, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -134,7 +134,28 @@ function ShaderMesh({ meshType, userCode, onError }) {
   )
 }
 
-export default function Viewer({ meshType, userCode, onError }) {
+// FPS tracker component
+function FpsTracker({ onFpsUpdate }) {
+  const frameCount = useRef(0)
+  const lastTime = useRef(performance.now())
+
+  useFrame(() => {
+    frameCount.current++
+    const now = performance.now()
+    const delta = now - lastTime.current
+
+    if (delta >= 500) { // Update every 500ms
+      const fps = Math.round((frameCount.current * 1000) / delta)
+      onFpsUpdate?.(fps)
+      frameCount.current = 0
+      lastTime.current = now
+    }
+  })
+
+  return null
+}
+
+export default function Viewer({ meshType, userCode, onError, onFpsUpdate }) {
   return (
     <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
       <color attach="background" args={['#0a0a0f']} />
@@ -144,6 +165,7 @@ export default function Viewer({ meshType, userCode, onError }) {
         onError={onError}
       />
       <OrbitControls enableDamping dampingFactor={0.05} />
+      <FpsTracker onFpsUpdate={onFpsUpdate} />
     </Canvas>
   )
 }

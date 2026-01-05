@@ -32,6 +32,7 @@ export default function App() {
   const [userCode, setUserCode] = useState(DEFAULT_CODE)
   const [error, setError] = useState(null)
   const [showExport, setShowExport] = useState(false)
+  const [fps, setFps] = useState(0)
 
   const handleError = useCallback((err) => {
     setError(err)
@@ -61,7 +62,10 @@ export default function App() {
       {/* Viewer Panel */}
       <div className="viewer-panel">
         <div className="viewer-header">
-          <h2>Preview</h2>
+          <div className="viewer-title">
+            <h2>Preview</h2>
+            <span className="fps-display">{fps} FPS</span>
+          </div>
           <div className="controls">
             <div className="mesh-selector">
               <button
@@ -93,6 +97,7 @@ export default function App() {
             meshType={meshType}
             userCode={userCode}
             onError={handleError}
+            onFpsUpdate={setFps}
           />
         </div>
       </div>
