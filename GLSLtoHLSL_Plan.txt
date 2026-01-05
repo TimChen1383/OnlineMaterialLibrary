@@ -1,0 +1,204 @@
+================================================================================
+GLSL to HLSL Conversion Upgrade Plan
+================================================================================
+
+Goal: Replace regex-based converter with proper GLSL -> SPIR-V -> HLSL pipeline
+
+================================================================================
+CURRENT STATE
+================================================================================
+- Pure frontend React app (no backend)
+- Regex-based conversion in src/utils/shaderConverter.js
+- Runs entirely in browser, deployed as static files
+
+Deployment Target: Full server deployment (Render, Railway, VPS, etc.)
+
+================================================================================
+STEP 0: INSTALL REQUIRED TOOLS (Local Development)
+================================================================================
+
+WINDOWS - Install Vulkan SDK:
+1. Download from: https://vulkan.lunarg.com/sdk/home
+2. Run installer, select "glslang" component
+3. After install, verify: glslangValidator --version
+4. Default location: C:\VulkanSDK\<version>\Bin\glslangValidator.exe
+
+WINDOWS - Install spirv-cross:
+1. Download from: https://github.com/AcademySoftwareFoundation/spirv-cross/releases
+2. Extract to a folder (e.g., C:\Tools\spirv-cross\)
+3. Add to PATH or note the full path to spirv-cross.exe
+
+Verify Installation:
+  glslangValidator --version
+  spirv-cross --version
+
+================================================================================
+REQUIRED TOOLS & PACKAGES
+================================================================================
+
+Tools:
+  glslangValidator  | GLSL -> SPIR-V | https://vulkan.lunarg.com/sdk/home
+  spirv-cross       | SPIR-V -> HLSL | https://github.com/.../spirv-cross/releases
+
+NPM Packages to Install:
+  npm install express cors
+  npm install -D concurrently
+
+================================================================================
+IMPLEMENTATION STEPS
+================================================================================
+
+------------------------------------------------------------------------------
+STEP 1: Create Backend Server
+------------------------------------------------------------------------------
+
+Create: server/index.js
+
+const express = require('express');
+const cors = require('cors');
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const GLSLANG_PATH = process.env.GLSLANG_PATH || 'glslangValidator';
+const SPIRV_CROSS_PATH = process.env.SPIRV_CROSS_PATH || 'spirv-cross';
+
+app.post('/api/convert', async (req, res) => {
+  const { glslCode, shaderType = 'frag' } = req.body;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shader-'));
+  const glslFile = path.join(tempDir, `shader.${shaderType}`);
+  const spirvFile = path.join(tempDir, 'shader.spv');
+
+  try {
+    fs.writeFileSync(glslFile, glslCode);
+
+    // GLSL -> SPIR-V
+    execFileSync(GLSLANG_PATH, ['-V', '-S', shaderType, '-o', spirvFile, glslFile]);
+
+    // SPIR-V -> HLSL
+    const hlslCode = execFileSync(SPIRV_CROSS_PATH, [
+      spirvFile, '--hlsl', '--shader-model', '50'
+    ]).toString();
+
+    res.json({ success: true, hlsl: hlslCode });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+app.listen(process.env.PORT || 3001);
+
+------------------------------------------------------------------------------
+STEP 2: Create Frontend API Client
+------------------------------------------------------------------------------
+
+Create: src/utils/shaderApi.js
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+export async function convertGlslToHlsl(glslCode, shaderType = 'frag') {
+  try {
+    const response = await fetch(`${API_URL}/api/convert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ glslCode, shaderType })
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.error);
+    return data.hlsl;
+  } catch (error) {
+    // Fallback to regex converter
+    const { glslToHlsl } = await import('./shaderConverter');
+    return glslToHlsl(glslCode);
+  }
+}
+
+------------------------------------------------------------------------------
+STEP 3: Update ExportModal.jsx
+------------------------------------------------------------------------------
+
+- Make conversion async
+- Add loading state while converting
+- Show errors if conversion fails
+- Keep regex converter as fallback
+
+------------------------------------------------------------------------------
+STEP 4: Update package.json Scripts
+------------------------------------------------------------------------------
+
+Add to scripts section:
+{
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/index.js",
+    "dev:full": "concurrently \"npm run dev\" \"npm run server\"",
+    "build": "vite build"
+  }
+}
+
+------------------------------------------------------------------------------
+STEP 5: Environment Configuration
+------------------------------------------------------------------------------
+
+Create .env.local (development):
+  VITE_API_URL=http://localhost:3001
+
+Create .env.production (deployment):
+  VITE_API_URL=https://your-api-server.com
+
+================================================================================
+FILE STRUCTURE AFTER IMPLEMENTATION
+================================================================================
+
+D:\GitHub\OnlineMaterialLibrary\
+├── server/
+│   └── index.js              # Express API server (NEW)
+├── src/
+│   ├── components/
+│   │   └── ExportModal.jsx   # Updated for async conversion
+│   └── utils/
+│       ├── shaderConverter.js  # Keep as fallback
+│       └── shaderApi.js        # API client (NEW)
+├── .env.local                  # Dev environment (NEW)
+├── .env.production             # Prod environment (NEW)
+└── package.json                # Updated scripts & deps
+
+================================================================================
+DEPLOYMENT OPTIONS
+================================================================================
+
+Option          | Frontend              | Backend        | Cost
+----------------|----------------------|----------------|----------
+Single Server   | Render/Railway       | Same server    | ~$7/month
+Separate        | Vercel/Netlify (free)| Render/Railway | ~$7/month
+
+For Linux deployment (Ubuntu):
+  sudo apt install vulkan-sdk spirv-cross
+
+================================================================================
+UNREAL-SPECIFIC HANDLING
+================================================================================
+
+After SPIRV-Cross conversion, still apply Unreal transforms:
+- finalColor = x;  ->  return x;
+- Keep glslToUnrealHlsl() for post-processing the clean HLSL output
+
+================================================================================
+FILES TO MODIFY
+================================================================================
+
+1. [NEW]    server/index.js           - Express API server
+2. [NEW]    src/utils/shaderApi.js    - Frontend API client
+3. [MODIFY] src/components/ExportModal.jsx - Async conversion
+4. [MODIFY] package.json              - Add deps and scripts
+5. [NEW]    .env.local                - Dev environment config
+6. [NEW]    .env.production           - Prod environment config
+
+================================================================================
