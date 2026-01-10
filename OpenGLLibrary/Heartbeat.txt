@@ -1,6 +1,6 @@
  // Setup coordinates: p is centered and aspect-corrected
-  vec2 r = resolution;
-  vec2 fragCoord = uv * resolution;
+  vec2 r = iResolution;
+  vec2 fragCoord = iUV * iResolution;
   vec2 p = (fragCoord - 0.5 * r) / r.y;
 
   // Initialize variables
@@ -21,7 +21,7 @@
   for(int k = 0; k < 30; k++) {
       p *= m;
       n *= m;
-      q = p * S + time * 4.0 + sin(time * 4.0 - d * 6.0) * 0.8 + j + n;
+      q = p * S + iTime * 4.0 + sin(iTime * 4.0 - d * 6.0) * 0.8 + j + n;
       a += dot(cos(q) / S, vec2(0.2));
       n -= sin(q);
       S *= 1.2;
@@ -32,4 +32,4 @@
   o += (a + 0.2) * vec4(4.0, 2.0, 1.0, 0.0) + a + a - d;
 
   // Set final output
-  finalColor = o.rgb;
+  fragColor = vec4(o.rgb, 1.0);

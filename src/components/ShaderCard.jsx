@@ -20,25 +20,33 @@ function wrapUserCode(userCode) {
   return `
 precision highp float;
 
-uniform float uTime;
 uniform vec2 uResolution;
+uniform float uTime;
+uniform float uTimeDelta;
+uniform float uFrame;
+uniform float uFrameRate;
 
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vPosition;
 
 void main() {
-  vec2 uv = vUv;
-  vec3 normal = vNormal;
-  vec3 position = vPosition;
-  float time = uTime;
-  vec2 resolution = uResolution;
+  // Pre-defined variables for user convenience (aligned with ShaderToy naming)
+  vec2 iResolution = uResolution;
+  float iTime = uTime;
+  float iTimeDelta = uTimeDelta;
+  float iFrame = uFrame;
+  float iFrameRate = uFrameRate;
+  vec2 iUV = vUv;
+  vec3 iNormal = vNormal;
+  vec3 iPosition = vPosition;
 
-  vec3 finalColor = vec3(1.0);
+  // Default output (vec4 RGBA)
+  vec4 fragColor = vec4(1.0);
 
   ${userCode}
 
-  gl_FragColor = vec4(finalColor, 1.0);
+  gl_FragColor = fragColor;
 }
 `
 }
@@ -49,8 +57,11 @@ function SnapshotCapture({ userCode, onSnapshot }) {
   const hasCaptured = useRef(false)
 
   const uniforms = useMemo(() => ({
+    uResolution: { value: new THREE.Vector2(300, 300) },
     uTime: { value: 0 },
-    uResolution: { value: new THREE.Vector2(300, 300) }
+    uTimeDelta: { value: 0 },
+    uFrame: { value: 0 },
+    uFrameRate: { value: 60 }
   }), [])
 
   const material = useMemo(() => {
@@ -98,10 +109,15 @@ function SnapshotCapture({ userCode, onSnapshot }) {
 function ShaderSphere({ userCode }) {
   const materialRef = useRef()
   const { gl } = useThree()
+  const frameCountRef = useRef(0)
+  const lastTimeRef = useRef(0)
 
   const uniforms = useMemo(() => ({
+    uResolution: { value: new THREE.Vector2(300, 300) },
     uTime: { value: 0 },
-    uResolution: { value: new THREE.Vector2(300, 300) }
+    uTimeDelta: { value: 0 },
+    uFrame: { value: 0 },
+    uFrameRate: { value: 60 }
   }), [])
 
   const material = useMemo(() => {
@@ -129,7 +145,15 @@ function ShaderSphere({ userCode }) {
 
   useFrame((state) => {
     if (materialRef.current && materialRef.current.uniforms) {
-      materialRef.current.uniforms.uTime.value = state.clock.elapsedTime
+      const currentTime = state.clock.elapsedTime
+      const deltaTime = currentTime - lastTimeRef.current
+      lastTimeRef.current = currentTime
+      frameCountRef.current++
+
+      materialRef.current.uniforms.uTime.value = currentTime
+      materialRef.current.uniforms.uTimeDelta.value = deltaTime
+      materialRef.current.uniforms.uFrame.value = frameCountRef.current
+      materialRef.current.uniforms.uFrameRate.value = deltaTime > 0 ? 1 / deltaTime : 60
     }
   })
 

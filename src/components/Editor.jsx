@@ -7,29 +7,32 @@ import { getShaderById } from '../shaders'
 
 // Default user code - simple starter template
 const DEFAULT_CODE = `/*Pre-defined Variables
-vec2 uv (Texture coordinates)
-vec3 normal (Surface normal)
-vec3 position (Vertex position in local space)
-float time (Elapsed time in seconds)
-vec2 resolution (Screen size in pixels  )
+vec2 iResolution (Screen size in pixels)
+float iTime (Current time in seconds)
+float iTimeDelta (Time to render a frame, in seconds)
+float iFrame (Current frame)
+float iFrameRate (Frames rendered per second)
+vec2 iUV (Texture coordinates)
+vec3 iNormal (Surface normal)
+vec3 iPosition (Vertex position in local space)
 */
 
 /*Output Variable
-vec3 finalColor (The RGB color output)
+vec4 fragColor (The RGBA color output)
 */
 
 // Simple gradient based on UV
-vec3 color = vec3(uv.x, uv.y, 0.5);
+vec3 color = vec3(iUV.x, iUV.y, 0.5);
 
 // Animate with time
-color.r = sin(time) * 0.5 + 0.5;
+color.r = sin(iTime) * 0.5 + 0.5;
 
 // Use normal for basic lighting
-float light = dot(normal, normalize(vec3(1.0, 1.0, 1.0)));
+float light = dot(iNormal, normalize(vec3(1.0, 1.0, 1.0)));
 color *= light;
 
 // Output (required)
-finalColor = color;`
+fragColor = vec4(color, 1.0);`
 
 export default function Editor() {
   const { id } = useParams()

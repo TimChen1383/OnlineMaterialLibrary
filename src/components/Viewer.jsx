@@ -22,29 +22,35 @@ function wrapUserCode(userCode) {
   return `
 precision highp float;
 
-uniform float uTime;
 uniform vec2 uResolution;
+uniform float uTime;
+uniform float uTimeDelta;
+uniform float uFrame;
+uniform float uFrameRate;
 
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vPosition;
 
 void main() {
-  // Pre-defined variables for user convenience
-  vec2 uv = vUv;
-  vec3 normal = vNormal;
-  vec3 position = vPosition;
-  float time = uTime;
-  vec2 resolution = uResolution;
+  // Pre-defined variables for user convenience (aligned with ShaderToy naming)
+  vec2 iResolution = uResolution;
+  float iTime = uTime;
+  float iTimeDelta = uTimeDelta;
+  float iFrame = uFrame;
+  float iFrameRate = uFrameRate;
+  vec2 iUV = vUv;
+  vec3 iNormal = vNormal;
+  vec3 iPosition = vPosition;
 
-  // Default output
-  vec3 finalColor = vec3(1.0);
+  // Default output (vec4 RGBA)
+  vec4 fragColor = vec4(1.0);
 
   // ---- USER CODE START ----
   ${userCode}
   // ---- USER CODE END ----
 
-  gl_FragColor = vec4(finalColor, 1.0);
+  gl_FragColor = fragColor;
 }
 `
 }
@@ -53,10 +59,15 @@ function ShaderMesh({ meshType, userCode, onError }) {
   const meshRef = useRef()
   const materialRef = useRef()
   const { gl } = useThree()
+  const frameCountRef = useRef(0)
+  const lastTimeRef = useRef(0)
 
   const uniforms = useMemo(() => ({
+    uResolution: { value: new THREE.Vector2(800, 600) },
     uTime: { value: 0 },
-    uResolution: { value: new THREE.Vector2(800, 600) }
+    uTimeDelta: { value: 0 },
+    uFrame: { value: 0 },
+    uFrameRate: { value: 60 }
   }), [])
 
   // Update resolution on resize
@@ -89,7 +100,7 @@ function ShaderMesh({ meshType, userCode, onError }) {
       let errorMsg = log
       const lineMatch = log.match(/ERROR: \d+:(\d+):(.*)/)
       if (lineMatch) {
-        const line = parseInt(lineMatch[1]) - 22 // Offset for wrapper code (user code starts at line 23)
+        const line = parseInt(lineMatch[1]) - 28 // Offset for wrapper code (user code starts at line 29)
         const msg = lineMatch[2].trim()
         errorMsg = `Line ${line > 0 ? line : '?'}: ${msg}`
       }
@@ -108,7 +119,15 @@ function ShaderMesh({ meshType, userCode, onError }) {
 
   useFrame((state) => {
     if (materialRef.current && materialRef.current.uniforms) {
-      materialRef.current.uniforms.uTime.value = state.clock.elapsedTime
+      const currentTime = state.clock.elapsedTime
+      const deltaTime = currentTime - lastTimeRef.current
+      lastTimeRef.current = currentTime
+      frameCountRef.current++
+
+      materialRef.current.uniforms.uTime.value = currentTime
+      materialRef.current.uniforms.uTimeDelta.value = deltaTime
+      materialRef.current.uniforms.uFrame.value = frameCountRef.current
+      materialRef.current.uniforms.uFrameRate.value = deltaTime > 0 ? 1 / deltaTime : 60
     }
   })
 

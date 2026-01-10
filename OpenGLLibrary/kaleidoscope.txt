@@ -1,6 +1,6 @@
-    // Platform variables: uv, normal, position, time, resolution
-    vec2 fragCoord = uv * resolution;
-    vec2 uv_main = (fragCoord * 2.0 - resolution) / resolution.y;
+    // Platform variables: iUV, iNormal, iPosition, iTime, iResolution
+    vec2 fragCoord = iUV * iResolution;
+    vec2 uv_main = (fragCoord * 2.0 - iResolution) / iResolution.y;
     vec2 uv0 = uv_main;
     vec3 finalCol = vec3(0.0);
 
@@ -13,14 +13,14 @@
 
         uv_main = fract(uv_main * 1.5) - 0.5;
         float dlen = length(uv_main) * exp(-length(uv0));
-        float t = length(uv0) + i * 0.4 + time * 0.4;
+        float t = length(uv0) + i * 0.4 + iTime * 0.4;
         vec3 col = a + b * cos(6.28318 * (c * t + d));
 
-        float dval = sin(dlen * 8.0 + time) / 8.0;
+        float dval = sin(dlen * 8.0 + iTime) / 8.0;
         dval = abs(dval);
         dval = pow(0.01 / dval, 1.2);
 
         finalCol += col * dval;
     }
 
-    finalColor = finalCol;
+    fragColor = vec4(finalCol, 1.0);

@@ -1,10 +1,10 @@
-    // Platform variables: uv, normal, position, time, resolution
+    // Platform variables: iUV, iNormal, iPosition, iTime, iResolution
     const int zoom = 40;
     const float brightness = 0.975;
-    float timeVal = time * 1.25;
-    vec2 fragCoord = uv * resolution;
-    vec2 uv_local = fragCoord / resolution;
-    vec2 p = (2.0 * fragCoord - resolution) / max(resolution.x, resolution.y);
+    float timeVal = iTime * 1.25;
+    vec2 fragCoord = iUV * iResolution;
+    vec2 uv_local = fragCoord / iResolution;
+    vec2 p = (2.0 * fragCoord - iResolution) / max(iResolution.x, iResolution.y);
 
     // Inline cosRange logic
     float ct = (((1.0 + cos(radians(timeVal * 5.0))) * 0.5) * 3.0) + 1.1;
@@ -30,4 +30,4 @@
     extrusion *= 1.5;
     extrusion *= vignette;
 
-    finalColor = col;
+    fragColor = vec4(col, 1.0);

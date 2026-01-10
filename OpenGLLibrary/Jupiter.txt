@@ -1,6 +1,6 @@
-    // Platform variables: uv, normal, position, time, resolution
-    float timeVal = time * 0.05 + 47.0;
-    vec2 z = -1.0 + 2.0 * uv;
+    // Platform variables: iUV, iNormal, iPosition, iTime, iResolution
+    float timeVal = iTime * 0.05 + 47.0;
+    vec2 z = -1.0 + 2.0 * iUV;
     z *= 1.5;
     vec3 col = vec3(1.0);
 
@@ -17,7 +17,7 @@
     }
 
     // Simple normal approximation for lighting
-    float e = 1.0 / resolution.x;
+    float e = 1.0 / iResolution.x;
     float f = dot(col, vec3(0.333));
     float fx = dot(
         ( // shape(uv + vec2(e, 0.0)) inlined
@@ -37,7 +37,7 @@
 
     col = pow(clamp(col, 0.0, 1.0), vec3(0.8, 1.1, 1.3));
 
-    vec2 uv_local = uv;
+    vec2 uv_local = iUV;
     col *= 0.4 + 0.6 * pow(16.0 * uv_local.x * uv_local.y * (1.0 - uv_local.x) * (1.0 - uv_local.y), 0.1);
 
-    finalColor = col;
+    fragColor = vec4(col, 1.0);

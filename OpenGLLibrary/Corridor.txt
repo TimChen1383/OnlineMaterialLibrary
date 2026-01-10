@@ -1,6 +1,6 @@
-vec2 s = resolution;
-  float t = time * 0.2, c, d, m;
-  vec2 fragCoord = uv * resolution;
+vec2 s = iResolution;
+  float t = iTime * 0.2, c, d, m;
+  vec2 fragCoord = iUV * iResolution;
   vec3 p = vec3((2.0 * fragCoord - s) / s.x, 1.0), r = p - p, q = r;
 
   // Inline rotation matrix multiplication
@@ -26,4 +26,4 @@ vec2 s = resolution;
   }
 
   float k = dot(r, r + 0.15);
-  finalColor = max(vec3(1.0, k, k / c) - 0.8, 0.0);
+  fragColor = vec4(max(vec3(1.0, k, k / c) - 0.8, 0.0), 1.0);

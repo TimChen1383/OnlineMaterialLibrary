@@ -1,5 +1,5 @@
-    vec2 F = uv * resolution;
-    vec2 r = resolution;
+    vec2 F = iUV * iResolution;
+    vec2 r = iResolution;
     vec2 p = (F + F - r) / r.y / 0.7;
     vec2 d = vec2(-1.0, 1.0);
     float i_init = 0.2;
@@ -8,13 +8,13 @@
     vec2 c = p * mat2(1.0, 1.0, d / (0.1 + i_init / dot(b, b)));
     a = dot(c, c);
     vec2 v = c * mat2(
-        cos(0.5 * log(a) + time * i_init + 0.0), cos(0.5 * log(a) + time * i_init + 33.0),
-        cos(0.5 * log(a) + time * i_init + 11.0), cos(0.5 * log(a) + time * i_init + 0.0)
+        cos(0.5 * log(a) + iTime * i_init + 0.0), cos(0.5 * log(a) + iTime * i_init + 33.0),
+        cos(0.5 * log(a) + iTime * i_init + 11.0), cos(0.5 * log(a) + iTime * i_init + 0.0)
     ) / i_init;
     vec2 w = vec2(0.0);
 
     for (float i = 0.2; i < 9.0; i += 1.0) {
-        v += 0.7 * sin(v.yx * i + time) / i + 0.5;
+        v += 0.7 * sin(v.yx * i + iTime) / i + 0.5;
         w += 1.0 + sin(v);
     }
 
@@ -29,4 +29,4 @@
         / (0.03 + abs(length(p) - 0.7))
     );
 
-    finalColor = O.rgb;
+    fragColor = vec4(O.rgb, 1.0);
