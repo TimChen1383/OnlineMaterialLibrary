@@ -1,0 +1,30 @@
+
+Pre-defined Variables
+- vec2 uv (Texture coordinates)
+- vec3 normal (Surface normal)
+- vec3 position (Vertex position in local space)
+- float time (Elapsed time in seconds)
+- vec2 resolution (Screen size in pixels  )
+
+Output Variable
+- vec3 finalColor (The RGB color output)
+
+Restrictions
+1. No custom functions - Code runs inside main(), so you cannot define functions like float myFunc() { ... }
+2. No uniforms/varyings - You cannot declare your own uniform or varying
+3. GLSL ES 1.0 syntax - WebGL 1.0 compatible (no in/out, use texture2D not texture)
+
+Example
+
+// Simple gradient based on UV
+vec3 color = vec3(uv.x, uv.y, 0.5);
+
+// Animate with time
+color.r = sin(time) * 0.5 + 0.5;
+
+// Use normal for basic lighting
+float light = dot(normal, normalize(vec3(1.0, 1.0, 1.0)));
+color *= light;
+
+// Output (required)
+finalColor = color;

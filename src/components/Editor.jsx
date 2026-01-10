@@ -5,28 +5,30 @@ import ShaderEditor from './ShaderEditor'
 import ExportModal from './ExportModal'
 import { getShaderById } from '../shaders'
 
-// Default user code - just the material logic
-const DEFAULT_CODE = `// Available variables:
-//   uv       - texture coordinates (0-1)
-//   normal   - surface normal (vec3)
-//   position - vertex position (vec3)
-//   time     - elapsed time in seconds
-//   resolution - screen size (vec2)
-//
-// Output: set finalColor (vec3)
+// Default user code - simple starter template
+const DEFAULT_CODE = `/*Pre-defined Variables
+vec2 uv (Texture coordinates)
+vec3 normal (Surface normal)
+vec3 position (Vertex position in local space)
+float time (Elapsed time in seconds)
+vec2 resolution (Screen size in pixels  )
+*/
 
-// Animated gradient
-vec3 color1 = vec3(0.1, 0.3, 0.6);
-vec3 color2 = vec3(0.9, 0.2, 0.3);
+/*Output Variable
+vec3 finalColor (The RGB color output)
+*/
 
-float t = sin(time + uv.x * 3.14159) * 0.5 + 0.5;
-vec3 color = mix(color1, color2, t);
+// Simple gradient based on UV
+vec3 color = vec3(uv.x, uv.y, 0.5);
 
-// Simple lighting
-vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-float diff = max(dot(normal, lightDir), 0.0);
-color *= 0.5 + 0.5 * diff;
+// Animate with time
+color.r = sin(time) * 0.5 + 0.5;
 
+// Use normal for basic lighting
+float light = dot(normal, normalize(vec3(1.0, 1.0, 1.0)));
+color *= light;
+
+// Output (required)
 finalColor = color;`
 
 export default function Editor() {

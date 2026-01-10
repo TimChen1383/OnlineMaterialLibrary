@@ -1,0 +1,20 @@
+
+- use mainImage() function as final output
+- ex: void mainImage( out vec4 fragColor, in vec2 fragCoord );
+
+
+Pre-defined Variables
+- vec3 iResolution;
+- float iTime (Current time in seconds)
+- float iTimeDelta (Time it takes to render a frame, in seconds)
+- float iFrame (Current frame)
+- float iFrameRate (Number of frames rendered per second)
+- float iChannelTime[4] (Time for channel in seconds)
+- vec4 iMouse (xy = current pixel coords (if LMB is down). zw = click pixel)
+- vec4 iDate (Year, month, day, time in seconds in .xyzw)
+- float iSampleRate (The sound sample rate (typically 44100))
+- vec3 iChannelResolution[4] (Input texture resolution for each channel)
+- vec2 fragCoord (coordinate)
+
+Output Variable
+- vec4 fragColor

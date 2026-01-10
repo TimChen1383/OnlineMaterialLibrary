@@ -367,6 +367,13 @@ body {
 
 .gallery-header {
   margin-bottom: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.gallery-header-content {
+  flex: 1;
 }
 
 .gallery-header h1 {
@@ -378,6 +385,27 @@ body {
 .gallery-subtitle {
   color: #888;
   font-size: 14px;
+}
+
+.new-shader-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #e94560;
+  border: none;
+  color: white;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.new-shader-btn:hover {
+  background: #d63850;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
 }
 
 .gallery-grid {
