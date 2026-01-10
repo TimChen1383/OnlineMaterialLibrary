@@ -7,7 +7,6 @@ export default function ExportModal({ userCode, onClose }) {
   const [convertedCode, setConvertedCode] = useState('')
   const [isConverting, setIsConverting] = useState(false)
   const [conversionError, setConversionError] = useState(null)
-  const [usedFallback, setUsedFallback] = useState(false)
   const [serverStatus, setServerStatus] = useState('checking')
 
   // Check server availability on mount
@@ -22,7 +21,13 @@ export default function ExportModal({ userCode, onClose }) {
     if (tab === 'glsl') {
       setConvertedCode(userCode)
       setConversionError(null)
-      setUsedFallback(false)
+      return
+    }
+
+    // Check server status before attempting conversion
+    if (serverStatus === 'offline') {
+      setConversionError('Conversion server is not available. Please ensure the server is running.')
+      setConvertedCode('')
       return
     }
 
@@ -33,14 +38,13 @@ export default function ExportModal({ userCode, onClose }) {
       const mode = tab === 'unrealHlsl' ? 'unrealHlsl' : 'hlsl'
       const result = await convertGlslToHlsl(userCode, { mode })
       setConvertedCode(result.hlsl)
-      setUsedFallback(result.usedFallback)
     } catch (err) {
       setConversionError(err.message)
       setConvertedCode('')
     } finally {
       setIsConverting(false)
     }
-  }, [userCode])
+  }, [userCode, serverStatus])
 
   // Trigger conversion when tab changes
   useEffect(() => {
@@ -81,9 +85,9 @@ export default function ExportModal({ userCode, onClose }) {
   }
 
   const getStatusIndicator = () => {
-    if (serverStatus === 'checking') return '...'
-    if (serverStatus === 'online') return 'SPIR-V'
-    return 'Regex'
+    if (serverStatus === 'checking') return 'Checking...'
+    if (serverStatus === 'online') return 'Server Online'
+    return 'Server Offline'
   }
 
   return (
@@ -120,12 +124,6 @@ export default function ExportModal({ userCode, onClose }) {
             </button>
           </div>
         </div>
-
-        {usedFallback && activeTab !== 'glsl' && (
-          <div className="fallback-notice">
-            Using regex fallback (server unavailable)
-          </div>
-        )}
 
         <div className="code-preview">
           {isConverting ? (

@@ -1,17 +1,15 @@
-import { glslToHlsl, glslToUnrealHlsl } from './shaderConverter';
-
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
  * Convert GLSL to HLSL using the backend SPIR-V pipeline
- * Falls back to regex converter if server is unavailable
+ * No fallback - requires server to be available
  *
  * @param {string} glslCode - The user's GLSL code
  * @param {object} options - Conversion options
  * @param {string} options.shaderType - 'frag' or 'vert'
  * @param {string} options.mode - 'hlsl' or 'unrealHlsl'
  * @param {boolean} options.extractUserCode - Whether to extract just user code section
- * @returns {Promise<{hlsl: string, usedFallback: boolean}>}
+ * @returns {Promise<{hlsl: string}>}
  */
 export async function convertGlslToHlsl(glslCode, options = {}) {
   const {
@@ -20,30 +18,25 @@ export async function convertGlslToHlsl(glslCode, options = {}) {
     extractUserCode = false
   } = options;
 
-  try {
-    const response = await fetch(`${API_URL}/api/convert`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ glslCode, shaderType, mode, extractUserCode })
-    });
-
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Conversion failed');
-    }
-
-    return { hlsl: data.hlsl, usedFallback: false };
-  } catch (error) {
-    console.warn('Server conversion failed, using fallback:', error.message);
-
-    // Fallback to regex converter
-    const fallbackHlsl = mode === 'unrealHlsl'
-      ? glslToUnrealHlsl(glslCode)
-      : glslToHlsl(glslCode);
-
-    return { hlsl: fallbackHlsl, usedFallback: true };
+  // First check if server is available
+  const serverAvailable = await isServerAvailable();
+  if (!serverAvailable) {
+    throw new Error('Conversion server is not available. Please ensure the server is running.');
   }
+
+  const response = await fetch(`${API_URL}/api/convert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ glslCode, shaderType, mode, extractUserCode })
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error || 'Conversion failed');
+  }
+
+  return { hlsl: data.hlsl };
 }
 
 /**

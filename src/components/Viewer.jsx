@@ -17,7 +17,7 @@ void main() {
 }
 `
 
-// Wrap user code into a complete fragment shader
+// Wrap user code into a complete fragment shader (Material Library mode)
 function wrapUserCode(userCode) {
   return `
 precision highp float;
@@ -55,7 +55,80 @@ void main() {
 `
 }
 
-function ShaderMesh({ meshType, userCode, onError }) {
+// Wrap user code for ShaderToy compatibility mode
+function wrapUserCodeShaderToy(userCode) {
+  return `
+precision highp float;
+
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uTimeDelta;
+uniform float uFrame;
+uniform float uFrameRate;
+
+varying vec2 vUv;
+
+// ShaderToy compatible uniforms
+vec3 iResolution;
+float iTime;
+float iTimeDelta;
+float iFrame;
+float iFrameRate;
+
+// ---- USER CODE START ----
+${userCode}
+// ---- USER CODE END ----
+
+void main() {
+  // Initialize ShaderToy uniforms
+  iResolution = vec3(uResolution, 1.0);
+  iTime = uTime;
+  iTimeDelta = uTimeDelta;
+  iFrame = uFrame;
+  iFrameRate = uFrameRate;
+
+  // Calculate fragCoord from UV (ShaderToy uses pixel coordinates)
+  vec2 fragCoord = vUv * uResolution;
+
+  // Call user's mainImage function
+  vec4 fragColor = vec4(0.0);
+  mainImage(fragColor, fragCoord);
+
+  gl_FragColor = fragColor;
+}
+`
+}
+
+// Check for unsupported ShaderToy parameters
+function checkUnsupportedShaderToyParams(userCode) {
+  const unsupportedParams = []
+
+  if (/\biMouse\b/.test(userCode)) {
+    unsupportedParams.push('iMouse (mouse input not supported)')
+  }
+  if (/\biDate\b/.test(userCode)) {
+    unsupportedParams.push('iDate (date input not supported)')
+  }
+  if (/\biSampleRate\b/.test(userCode)) {
+    unsupportedParams.push('iSampleRate (audio not supported)')
+  }
+  if (/\biChannelResolution\b/.test(userCode)) {
+    unsupportedParams.push('iChannelResolution (texture channels not supported)')
+  }
+  if (/\biChannelTime\b/.test(userCode)) {
+    unsupportedParams.push('iChannelTime (texture channels not supported)')
+  }
+  if (/\biChannel\d\b/.test(userCode)) {
+    unsupportedParams.push('iChannel0-3 (texture inputs not supported)')
+  }
+  if (/\btexture\s*\(/.test(userCode)) {
+    unsupportedParams.push('texture() (texture sampling not supported)')
+  }
+
+  return unsupportedParams
+}
+
+function ShaderMesh({ meshType, userCode, shaderRule, onError }) {
   const meshRef = useRef()
   const materialRef = useRef()
   const { gl } = useThree()
@@ -83,7 +156,21 @@ function ShaderMesh({ meshType, userCode, onError }) {
   }, [uniforms])
 
   const material = useMemo(() => {
-    const fragmentShader = wrapUserCode(userCode)
+    // Check for unsupported parameters in ShaderToy mode
+    let warnings = []
+    if (shaderRule === 'shadertoy') {
+      warnings = checkUnsupportedShaderToyParams(userCode)
+    }
+
+    // Use appropriate wrapper based on shader rule
+    const fragmentShader = shaderRule === 'shadertoy'
+      ? wrapUserCodeShaderToy(userCode)
+      : wrapUserCode(userCode)
+
+    // Line offset depends on the wrapper used
+    // Material Library: user code starts at line 29 (offset 28)
+    // ShaderToy: user code starts at line 20 (offset 19)
+    const lineOffset = shaderRule === 'shadertoy' ? 19 : 28
 
     // Manually compile shader to check for errors
     const glContext = gl.getContext()
@@ -100,22 +187,32 @@ function ShaderMesh({ meshType, userCode, onError }) {
       let errorMsg = log
       const lineMatch = log.match(/ERROR: \d+:(\d+):(.*)/)
       if (lineMatch) {
-        const line = parseInt(lineMatch[1]) - 28 // Offset for wrapper code (user code starts at line 29)
+        const line = parseInt(lineMatch[1]) - lineOffset
         const msg = lineMatch[2].trim()
         errorMsg = `Line ${line > 0 ? line : '?'}: ${msg}`
+      }
+      // Prepend warnings if any
+      if (warnings.length > 0) {
+        errorMsg = `Warning: Unsupported parameters - ${warnings.join(', ')}\n${errorMsg}`
       }
       onError(errorMsg)
       return new THREE.MeshBasicMaterial({ color: 0x331111 })
     }
 
-    onError(null)
+    // Show warnings even if compilation succeeds
+    if (warnings.length > 0) {
+      onError(`Warning: Unsupported parameters - ${warnings.join(', ')}`)
+    } else {
+      onError(null)
+    }
+
     return new THREE.ShaderMaterial({
       uniforms,
       vertexShader: VERTEX_SHADER,
       fragmentShader,
       side: THREE.DoubleSide
     })
-  }, [userCode, uniforms, onError, gl])
+  }, [userCode, shaderRule, uniforms, onError, gl])
 
   useFrame((state) => {
     if (materialRef.current && materialRef.current.uniforms) {
@@ -174,13 +271,14 @@ function FpsTracker({ onFpsUpdate }) {
   return null
 }
 
-export default function Viewer({ meshType, userCode, onError, onFpsUpdate }) {
+export default function Viewer({ meshType, userCode, shaderRule, onError, onFpsUpdate }) {
   return (
     <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
       <color attach="background" args={['#0a0a0f']} />
       <ShaderMesh
         meshType={meshType}
         userCode={userCode}
+        shaderRule={shaderRule}
         onError={onError}
       />
       <OrbitControls enableDamping dampingFactor={0.05} />

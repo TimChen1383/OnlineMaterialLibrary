@@ -40,29 +40,35 @@ layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec3 vNormal;
 layout(location = 2) in vec3 vPosition;
 
-layout(location = 0) out vec4 fragColor;
+layout(location = 0) out vec4 outFragColor;
 
 layout(binding = 0) uniform Uniforms {
-  float uTime;
   vec2 uResolution;
+  float uTime;
+  float uTimeDelta;
+  float uFrame;
+  float uFrameRate;
 };
 
 void main() {
-  // Pre-defined variables for user convenience
-  vec2 uv = vUv;
-  vec3 normal = vNormal;
-  vec3 position = vPosition;
-  float time = uTime;
-  vec2 resolution = uResolution;
+  // Pre-defined variables for user convenience (aligned with ShaderToy naming)
+  vec2 iResolution = uResolution;
+  float iTime = uTime;
+  float iTimeDelta = uTimeDelta;
+  float iFrame = uFrame;
+  float iFrameRate = uFrameRate;
+  vec2 iUV = vUv;
+  vec3 iNormal = vNormal;
+  vec3 iPosition = vPosition;
 
-  // Default output
-  vec3 finalColor = vec3(1.0);
+  // Default output (vec4 RGBA)
+  vec4 fragColor = vec4(1.0);
 
   // ---- USER CODE START ----
   ${userCode}
   // ---- USER CODE END ----
 
-  fragColor = vec4(finalColor, 1.0);
+  outFragColor = fragColor;
 }
 `;
 }
@@ -85,9 +91,9 @@ function applyUnrealTransforms(hlslCode) {
     return `float4(${arg.trim()}, ${arg.trim()}, ${arg.trim()}, ${arg.trim()})`;
   });
 
-  // Convert finalColor assignment to return statement (but not declarations)
-  // Skip lines that have a type declaration before finalColor
-  hlsl = hlsl.replace(/^(\s*)finalColor\s*=\s*([^;]+);/gm, (match, indent, value) => {
+  // Convert fragColor assignment to return statement (but not declarations)
+  // Skip lines that have a type declaration before fragColor
+  hlsl = hlsl.replace(/^(\s*)fragColor\s*=\s*([^;]+);/gm, (match, indent, value) => {
     return `${indent}return ${value.trim()};`;
   });
 
@@ -113,13 +119,16 @@ function extractUserCodeSection(hlslCode) {
   const filteredLines = lines.filter(line => {
     const trimmed = line.trim();
     // Skip variable initialization lines that are part of the wrapper
-    if (trimmed.startsWith('float2 uv =')) return false;
-    if (trimmed.startsWith('float3 normal =')) return false;
-    if (trimmed.startsWith('float3 position =')) return false;
-    if (trimmed.startsWith('float time =')) return false;
-    if (trimmed.startsWith('float2 resolution =')) return false;
-    if (trimmed.startsWith('float3 finalColor =')) return false;
-    if (trimmed.startsWith('fragColor =')) return false;
+    if (trimmed.startsWith('float2 iResolution =')) return false;
+    if (trimmed.startsWith('float iTime =')) return false;
+    if (trimmed.startsWith('float iTimeDelta =')) return false;
+    if (trimmed.startsWith('float iFrame =')) return false;
+    if (trimmed.startsWith('float iFrameRate =')) return false;
+    if (trimmed.startsWith('float2 iUV =')) return false;
+    if (trimmed.startsWith('float3 iNormal =')) return false;
+    if (trimmed.startsWith('float3 iPosition =')) return false;
+    if (trimmed.startsWith('float4 fragColor =')) return false;
+    if (trimmed.startsWith('outFragColor =')) return false;
     if (trimmed === '') return false;
     return true;
   });
@@ -157,7 +166,7 @@ app.post('/api/convert', async (req, res) => {
       let errorMsg = glslError.stderr ? glslError.stderr.toString() : glslError.message;
       const lineMatch = errorMsg.match(/ERROR:\s*\d+:(\d+):\s*(.*)/);
       if (lineMatch) {
-        const line = parseInt(lineMatch[1]) - 27; // Offset for wrapper code
+        const line = parseInt(lineMatch[1]) - 31; // Offset for wrapper code (user code starts at line 32)
         const msg = lineMatch[2].trim();
         errorMsg = `GLSL Error - Line ${line > 0 ? line : '?'}: ${msg}`;
       }

@@ -43,6 +43,7 @@ export default function Editor() {
   const [error, setError] = useState(null)
   const [showExport, setShowExport] = useState(false)
   const [fps, setFps] = useState(0)
+  const [shaderRule, setShaderRule] = useState('material-library')
 
   // Load shader if ID is provided
   useEffect(() => {
@@ -72,7 +73,19 @@ export default function Editor() {
             </button>
             <h2>{shaderName}</h2>
           </div>
-          <span className="editor-hint">GLSL</span>
+          <div className="editor-options">
+            <div className="rule-selector">
+              <label>Shader Rule:</label>
+              <select
+                value={shaderRule}
+                onChange={(e) => setShaderRule(e.target.value)}
+              >
+                <option value="material-library">Material Library</option>
+                <option value="shadertoy">ShaderToy</option>
+              </select>
+            </div>
+            <span className="editor-hint">GLSL</span>
+          </div>
         </div>
         <div className="editor-container">
           <ShaderEditor
@@ -81,7 +94,7 @@ export default function Editor() {
           />
         </div>
         {error && (
-          <div className="error-panel">
+          <div className={`error-panel ${error.startsWith('Warning:') ? 'warning' : ''}`}>
             {error}
           </div>
         )}
@@ -124,6 +137,7 @@ export default function Editor() {
           <Viewer
             meshType={meshType}
             userCode={userCode}
+            shaderRule={shaderRule}
             onError={handleError}
             onFpsUpdate={setFps}
           />
