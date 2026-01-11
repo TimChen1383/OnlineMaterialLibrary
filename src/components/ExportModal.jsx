@@ -51,6 +51,7 @@ export default function ExportModal({ userCode, shaderLanguage = 'slang', onClos
       // Map tab to Slang target
       const targetMap = {
         'hlsl': 'hlsl',
+        'unrealHlsl': 'unrealHlsl',
         'glslOutput': 'glsl',
         'wgsl': 'wgsl',
         'metal': 'metal',
@@ -101,12 +102,13 @@ export default function ExportModal({ userCode, shaderLanguage = 'slang', onClos
       'glsl': 'glsl',
       'glslOutput': 'glsl',
       'hlsl': 'hlsl',
+      'unrealHlsl': 'hlsl',
       'wgsl': 'wgsl',
       'metal': 'metal',
       'spirv': 'spv'
     }
     const ext = extMap[activeTab] || 'txt'
-    const filename = `shader_material.${ext}`
+    const filename = activeTab === 'unrealHlsl' ? `shader_unreal.${ext}` : `shader_material.${ext}`
     const blob = new Blob([code], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -164,6 +166,12 @@ export default function ExportModal({ userCode, shaderLanguage = 'slang', onClos
                 onClick={() => setActiveTab('hlsl')}
               >
                 HLSL
+              </button>
+              <button
+                className={`modal-tab ${activeTab === 'unrealHlsl' ? 'active' : ''}`}
+                onClick={() => setActiveTab('unrealHlsl')}
+              >
+                Unreal
               </button>
               <button
                 className={`modal-tab ${activeTab === 'glslOutput' ? 'active' : ''}`}

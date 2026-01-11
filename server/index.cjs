@@ -397,6 +397,132 @@ function cleanupSlangHlslOutput(hlslCode) {
   return code;
 }
 
+// Clean up Slang HLSL output for Unreal Engine Custom Material Node
+function cleanupSlangHlslForUnreal(hlslCode) {
+  let code = hlslCode;
+
+  // Remove preprocessor pragmas and NVAPI includes
+  code = code.replace(/#pragma pack_matrix\(column_major\)\s*/g, '');
+  code = code.replace(/#ifdef SLANG_HLSL_ENABLE_NVAPI[\s\S]*?#endif\s*/g, '');
+  code = code.replace(/#ifndef __DXC_VERSION_MAJOR[\s\S]*?#endif\s*/g, '');
+  code = code.replace(/^#line\s+\d+.*$/gm, '');
+
+  // Remove struct definitions
+  code = code.replace(/struct\s+GlobalParams_0\s*\{[^}]*\}\s*;\s*/gs, '');
+  code = code.replace(/struct\s+VSInput_0\s*\{[^}]*\}\s*;\s*/gs, '');
+
+  // Remove cbuffer definition
+  code = code.replace(/cbuffer\s+globalParams_0\s*:\s*register\s*\([^)]*\)\s*\{[^}]*\}\s*/gs, '');
+
+  // Extract function body from fragmentMain
+  const funcMatch = code.match(/float4\s+fragmentMain\s*\([^)]*\)\s*:\s*SV_TARGET\s*\{([\s\S]*)\}/);
+  if (!funcMatch) {
+    return '// Error: Could not extract function body\n' + code;
+  }
+
+  let funcBody = funcMatch[1];
+
+  // Map Slang variable names to Unreal equivalents
+  funcBody = funcBody.replace(/globalParams_0\.uResolution_0/g, 'Resolution');
+  funcBody = funcBody.replace(/globalParams_0\.uTime_0/g, 'Time');
+  funcBody = funcBody.replace(/globalParams_0\.uTimeDelta_0/g, 'DeltaTime');
+  funcBody = funcBody.replace(/globalParams_0\.uFrame_0/g, 'Frame');
+  funcBody = funcBody.replace(/globalParams_0\.uFrameRate_0/g, 'FrameRate');
+
+  funcBody = funcBody.replace(/input_0\.uv_0/g, 'UV');
+  funcBody = funcBody.replace(/input_0\.normal_0/g, 'Normal');
+  funcBody = funcBody.replace(/input_0\.position_0/g, 'Position');
+
+  // Clean up temp variable names
+  funcBody = funcBody.replace(/_S(\d+)/g, 't$1');
+
+  // Convert for(;;) to bounded loop
+  funcBody = funcBody.replace(/for\s*\(\s*;\s*;\s*\)/g, 'for(int _loopIdx = 0; _loopIdx < 10000; _loopIdx++)');
+
+  // Convert return float4(...) to return the RGB part only
+  // Handle nested parentheses by finding matching brackets
+  funcBody = funcBody.replace(/return\s+float4\s*\(/g, (match) => {
+    return '__RETURN_FLOAT4_START__(';
+  });
+
+  // Find the float4 return and extract just the color part
+  if (funcBody.includes('__RETURN_FLOAT4_START__')) {
+    // Find the position of the marker (includes the original "return ")
+    const startMarker = '__RETURN_FLOAT4_START__(';
+    const startIdx = funcBody.indexOf(startMarker);
+    if (startIdx !== -1) {
+      const afterStart = startIdx + startMarker.length;
+      // Find matching closing paren by counting brackets
+      let depth = 1;
+      let endIdx = afterStart;
+      while (depth > 0 && endIdx < funcBody.length) {
+        if (funcBody[endIdx] === '(') depth++;
+        if (funcBody[endIdx] === ')') depth--;
+        endIdx++;
+      }
+      // Now endIdx is right after the closing paren
+      const innerContent = funcBody.substring(afterStart, endIdx - 1);
+
+      // Find the last comma that separates alpha from color (at depth 0)
+      let lastCommaIdx = -1;
+      depth = 0;
+      for (let i = innerContent.length - 1; i >= 0; i--) {
+        if (innerContent[i] === ')') depth++;
+        if (innerContent[i] === '(') depth--;
+        if (innerContent[i] === ',' && depth === 0) {
+          lastCommaIdx = i;
+          break;
+        }
+      }
+
+      if (lastCommaIdx !== -1) {
+        // Extract just the color part (before the last comma)
+        const colorPart = innerContent.substring(0, lastCommaIdx).trim();
+        // Replace the entire marker + content + closing paren with just return + colorPart
+        funcBody = funcBody.substring(0, startIdx) + 'return ' + colorPart + ';' + funcBody.substring(endIdx + 1);
+      } else {
+        // No comma found, just append .xyz
+        funcBody = funcBody.replace('__RETURN_FLOAT4_START__', 'float4');
+        funcBody = funcBody.replace(/return\s+float4\s*\(([^;]+)\)\s*;/, 'return ($1).xyz;');
+      }
+    }
+  }
+
+  // Clean up indentation
+  funcBody = funcBody.split('\n').map(line => {
+    if (line.startsWith('    ')) {
+      return line.substring(4);
+    }
+    return line;
+  }).join('\n');
+
+  // Build Unreal-compatible output
+  const result = `// Unreal Engine Custom Material Node
+// Connect these inputs in the Material Editor:
+//   - Time: Use "Time" node
+//   - UV: Use "TexCoord[0]" node
+//   - Normal: Use "VertexNormalWS" node
+//   - Position: Use "WorldPosition" node
+//   - Resolution: Use "ViewSize" node or create a parameter
+
+// Input variables (connect via Material Editor)
+float Time = View.RealTime;
+float2 UV = TexCoords[0].xy;
+float3 Normal = Parameters.TangentToWorld[2];
+float3 Position = GetWorldPosition(Parameters);
+float2 Resolution = View.ViewSizeAndInvSize.xy;
+
+// Additional variables (if needed)
+float DeltaTime = View.DeltaTime;
+float Frame = View.FrameNumber;
+float FrameRate = 1.0 / max(View.DeltaTime, 0.001);
+
+// Shader logic
+${funcBody.trim()}`;
+
+  return result.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // Clean up Slang WGSL output
 function cleanupSlangWgslOutput(wgslCode) {
   let code = wgslCode;
@@ -550,7 +676,7 @@ app.post('/api/slang/compile', async (req, res) => {
   }
 
   // Validate target
-  const validTargets = ['glsl', 'hlsl', 'spirv', 'wgsl', 'metal'];
+  const validTargets = ['glsl', 'hlsl', 'unrealHlsl', 'spirv', 'wgsl', 'metal'];
   if (!validTargets.includes(target)) {
     return res.status(400).json({
       success: false,
@@ -561,10 +687,11 @@ app.post('/api/slang/compile', async (req, res) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'slang-'));
   const slangFile = path.join(tempDir, 'shader.slang');
 
-  // Determine output extension based on target
+  // Determine output extension based on target (unrealHlsl uses hlsl extension)
   const outputExtensions = {
     glsl: 'glsl',
     hlsl: 'hlsl',
+    unrealHlsl: 'hlsl',
     spirv: 'spv',
     wgsl: 'wgsl',
     metal: 'metal'
@@ -584,7 +711,8 @@ app.post('/api/slang/compile', async (req, res) => {
 
     // For GLSL target, use SPIR-V + spirv-cross pipeline for better ES compatibility
     const useSpirVCrossPipeline = (target === 'glsl');
-    const slangTarget = useSpirVCrossPipeline ? 'spirv' : target;
+    // Map unrealHlsl to hlsl for Slang compilation
+    const slangTarget = useSpirVCrossPipeline ? 'spirv' : (target === 'unrealHlsl' ? 'hlsl' : target);
     const slangOutputFile = useSpirVCrossPipeline
       ? path.join(tempDir, 'shader.spv')
       : outputFile;
@@ -599,7 +727,7 @@ app.post('/api/slang/compile', async (req, res) => {
     ];
 
     // Add target-specific options
-    if (target === 'hlsl') {
+    if (target === 'hlsl' || target === 'unrealHlsl') {
       args.push('-profile', 'sm_5_0');
     }
 
@@ -660,6 +788,8 @@ app.post('/api/slang/compile', async (req, res) => {
       if (forExport) {
         if (target === 'hlsl') {
           compiledCode = cleanupSlangHlslOutput(compiledCode);
+        } else if (target === 'unrealHlsl') {
+          compiledCode = cleanupSlangHlslForUnreal(compiledCode);
         } else if (target === 'wgsl') {
           compiledCode = cleanupSlangWgslOutput(compiledCode);
         } else if (target === 'metal') {
