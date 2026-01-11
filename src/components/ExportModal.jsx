@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { convertGlslToHlsl, isServerAvailable } from '../utils/shaderApi'
+import { compileSlang, isSlangAvailable } from '../utils/shaderApi'
 
-export default function ExportModal({ userCode, onClose }) {
-  const [activeTab, setActiveTab] = useState('glsl')
+export default function ExportModal({ userCode, shaderLanguage = 'slang', onClose }) {
+  const [activeTab, setActiveTab] = useState('slang')
   const [copied, setCopied] = useState(false)
   const [convertedCode, setConvertedCode] = useState('')
   const [isConverting, setIsConverting] = useState(false)
@@ -11,14 +11,20 @@ export default function ExportModal({ userCode, onClose }) {
 
   // Check server availability on mount
   useEffect(() => {
-    isServerAvailable().then(available => {
-      setServerStatus(available ? 'online' : 'offline')
+    isSlangAvailable().then(result => {
+      setServerStatus(result.available ? 'online' : 'offline')
     })
   }, [])
 
-  // Convert code when tab changes to HLSL variants
+  // Set initial tab based on shader language
+  useEffect(() => {
+    setActiveTab(shaderLanguage === 'glsl' ? 'glsl' : 'slang')
+  }, [shaderLanguage])
+
+  // Convert code when tab changes
   const convertCode = useCallback(async (tab) => {
-    if (tab === 'glsl') {
+    // For source code tabs, just show the user code directly
+    if (tab === 'slang' || tab === 'glsl') {
       setConvertedCode(userCode)
       setConversionError(null)
       return
@@ -26,7 +32,14 @@ export default function ExportModal({ userCode, onClose }) {
 
     // Check server status before attempting conversion
     if (serverStatus === 'offline') {
-      setConversionError('Conversion server is not available. Please ensure the server is running.')
+      setConversionError('Slang compiler is not available. Please ensure the server is running.')
+      setConvertedCode('')
+      return
+    }
+
+    // Only Slang source can be converted to other targets
+    if (shaderLanguage !== 'slang') {
+      setConversionError('Cross-compilation is only available for Slang source code.')
       setConvertedCode('')
       return
     }
@@ -35,16 +48,25 @@ export default function ExportModal({ userCode, onClose }) {
     setConversionError(null)
 
     try {
-      const mode = tab === 'unrealHlsl' ? 'unrealHlsl' : 'hlsl'
-      const result = await convertGlslToHlsl(userCode, { mode })
-      setConvertedCode(result.hlsl)
+      // Map tab to Slang target
+      const targetMap = {
+        'hlsl': 'hlsl',
+        'glslOutput': 'glsl',
+        'wgsl': 'wgsl',
+        'metal': 'metal',
+        'spirv': 'spirv'
+      }
+      const target = targetMap[tab] || 'hlsl'
+
+      const result = await compileSlang(userCode, { target, mode: 'materialLibrary', forExport: true })
+      setConvertedCode(result.code)
     } catch (err) {
       setConversionError(err.message)
       setConvertedCode('')
     } finally {
       setIsConverting(false)
     }
-  }, [userCode, serverStatus])
+  }, [userCode, serverStatus, shaderLanguage])
 
   // Trigger conversion when tab changes
   useEffect(() => {
@@ -52,7 +74,7 @@ export default function ExportModal({ userCode, onClose }) {
   }, [activeTab, convertCode])
 
   const getDisplayCode = () => {
-    if (activeTab === 'glsl') return userCode
+    if (activeTab === 'slang' || activeTab === 'glsl') return userCode
     return convertedCode
   }
 
@@ -73,7 +95,17 @@ export default function ExportModal({ userCode, onClose }) {
     const code = getDisplayCode()
     if (!code) return
 
-    const ext = activeTab === 'glsl' ? 'glsl' : 'hlsl'
+    // Map tab to file extension
+    const extMap = {
+      'slang': 'slang',
+      'glsl': 'glsl',
+      'glslOutput': 'glsl',
+      'hlsl': 'hlsl',
+      'wgsl': 'wgsl',
+      'metal': 'metal',
+      'spirv': 'spv'
+    }
+    const ext = extMap[activeTab] || 'txt'
     const filename = `shader_material.${ext}`
     const blob = new Blob([code], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
@@ -100,30 +132,60 @@ export default function ExportModal({ userCode, onClose }) {
           </span>
         </div>
 
-        {/* Language selection */}
+        {/* Source code section */}
         <div className="modal-section">
-          <label>Language:</label>
+          <label>Source:</label>
           <div className="modal-tabs">
-            <button
-              className={`modal-tab ${activeTab === 'glsl' ? 'active' : ''}`}
-              onClick={() => setActiveTab('glsl')}
-            >
-              GLSL
-            </button>
-            <button
-              className={`modal-tab ${activeTab === 'hlsl' ? 'active' : ''}`}
-              onClick={() => setActiveTab('hlsl')}
-            >
-              HLSL
-            </button>
-            <button
-              className={`modal-tab ${activeTab === 'unrealHlsl' ? 'active' : ''}`}
-              onClick={() => setActiveTab('unrealHlsl')}
-            >
-              HLSL (Unreal)
-            </button>
+            {shaderLanguage === 'slang' ? (
+              <button
+                className={`modal-tab ${activeTab === 'slang' ? 'active' : ''}`}
+                onClick={() => setActiveTab('slang')}
+              >
+                Slang
+              </button>
+            ) : (
+              <button
+                className={`modal-tab ${activeTab === 'glsl' ? 'active' : ''}`}
+                onClick={() => setActiveTab('glsl')}
+              >
+                GLSL
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Export targets section (only for Slang source) */}
+        {shaderLanguage === 'slang' && (
+          <div className="modal-section">
+            <label>Export to:</label>
+            <div className="modal-tabs">
+              <button
+                className={`modal-tab ${activeTab === 'hlsl' ? 'active' : ''}`}
+                onClick={() => setActiveTab('hlsl')}
+              >
+                HLSL
+              </button>
+              <button
+                className={`modal-tab ${activeTab === 'glslOutput' ? 'active' : ''}`}
+                onClick={() => setActiveTab('glslOutput')}
+              >
+                GLSL
+              </button>
+              <button
+                className={`modal-tab ${activeTab === 'wgsl' ? 'active' : ''}`}
+                onClick={() => setActiveTab('wgsl')}
+              >
+                WGSL
+              </button>
+              <button
+                className={`modal-tab ${activeTab === 'metal' ? 'active' : ''}`}
+                onClick={() => setActiveTab('metal')}
+              >
+                Metal
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="code-preview">
           {isConverting ? (

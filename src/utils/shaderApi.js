@@ -68,3 +68,78 @@ export async function getToolsInfo() {
     return null;
   }
 }
+
+// ============================================================================
+// SLANG COMPILATION API
+// ============================================================================
+
+/**
+ * Compile Slang code to a target format
+ *
+ * @param {string} source - The user's Slang code
+ * @param {object} options - Compilation options
+ * @param {string} options.target - Target format: 'glsl', 'hlsl', 'spirv', 'wgsl', 'metal'
+ * @param {string} options.mode - 'materialLibrary' or 'shaderToy'
+ * @param {boolean} options.forExport - If true, apply cleanup for readable export output
+ * @returns {Promise<{code: string, target: string, mode: string}>}
+ */
+export async function compileSlang(source, options = {}) {
+  const {
+    target = 'glsl',
+    mode = 'materialLibrary',
+    forExport = false
+  } = options;
+
+  const response = await fetch(`${API_URL}/api/slang/compile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, target, mode, forExport })
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    const error = new Error(data.error || 'Compilation failed');
+    error.errors = data.errors || [];
+    error.stage = data.stage;
+    throw error;
+  }
+
+  return {
+    code: data.code,
+    target: data.target,
+    mode: data.mode
+  };
+}
+
+/**
+ * Check if the Slang compiler is available
+ * @returns {Promise<{available: boolean, targets: string[]}>}
+ */
+export async function isSlangAvailable() {
+  try {
+    const response = await fetch(`${API_URL}/api/slang/version`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(3000)
+    });
+    if (!response.ok) return { available: false, targets: [] };
+    return await response.json();
+  } catch {
+    return { available: false, targets: [] };
+  }
+}
+
+/**
+ * Get available Slang compilation targets
+ * @returns {Promise<Array<{id: string, name: string, description: string}>>}
+ */
+export async function getSlangTargets() {
+  try {
+    const response = await fetch(`${API_URL}/api/slang/targets`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.targets || [];
+  } catch {
+    return [];
+  }
+}

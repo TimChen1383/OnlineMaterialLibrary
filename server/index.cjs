@@ -12,6 +12,7 @@ app.use(express.json({ limit: '1mb' }));
 // Tool paths - can be overridden with environment variables
 const GLSLANG_PATH = process.env.GLSLANG_PATH || 'glslangValidator';
 const SPIRV_CROSS_PATH = process.env.SPIRV_CROSS_PATH || 'spirv-cross';
+const SLANG_PATH = process.env.SLANG_PATH || 'slangc';
 
 // Vertex shader used by the frontend
 const VERTEX_SHADER = `#version 450
@@ -245,9 +246,490 @@ app.get('/api/tools', async (req, res) => {
   res.json(tools);
 });
 
+// ============================================================================
+// SLANG COMPILATION ENDPOINTS
+// ============================================================================
+
+// Wrap user code into a complete Slang fragment shader for Material Library mode
+function wrapUserCodeForSlang(userCode) {
+  return `// Slang Fragment Shader - Material Library Mode
+
+// Uniforms
+uniform float2 uResolution;
+uniform float uTime;
+uniform float uTimeDelta;
+uniform float uFrame;
+uniform float uFrameRate;
+
+// Varyings from vertex shader
+struct VSInput
+{
+    float2 uv : TEXCOORD0;
+    float3 normal : NORMAL;
+    float3 position : TEXCOORD1;
+};
+
+[shader("fragment")]
+float4 fragmentMain(VSInput input) : SV_Target
+{
+    // Pre-defined variables for user convenience
+    float2 iResolution = uResolution;
+    float iTime = uTime;
+    float iTimeDelta = uTimeDelta;
+    float iFrame = uFrame;
+    float iFrameRate = uFrameRate;
+    float2 iUV = input.uv;
+    float3 iNormal = input.normal;
+    float3 iPosition = input.position;
+
+    // Default output
+    float4 fragColor = float4(1.0, 1.0, 1.0, 1.0);
+
+    // ---- USER CODE START (line 36) ----
+${userCode}
+    // ---- USER CODE END ----
+
+    return fragColor;
+}
+`;
+}
+
+// Wrap user code for ShaderToy compatibility mode
+function wrapUserCodeForSlangShaderToy(userCode) {
+  return `// Slang Fragment Shader - ShaderToy Mode
+
+// Uniforms
+uniform float3 iResolution;
+uniform float iTime;
+uniform float iTimeDelta;
+uniform float iFrame;
+uniform float iFrameRate;
+
+// Varyings
+struct VSInput
+{
+    float2 uv : TEXCOORD0;
+};
+
+// Forward declaration for mainImage
+void mainImage(out float4 fragColor, in float2 fragCoord);
+
+[shader("fragment")]
+float4 fragmentMain(VSInput input) : SV_Target
+{
+    float2 fragCoord = input.uv * iResolution.xy;
+    float4 fragColor = float4(0.0, 0.0, 0.0, 1.0);
+    mainImage(fragColor, fragCoord);
+    return fragColor;
+}
+
+// ---- USER CODE START (line 28) ----
+${userCode}
+// ---- USER CODE END ----
+`;
+}
+
+// Parse Slang compiler error output
+function parseSlangErrors(stderr, lineOffset) {
+  const errors = [];
+  const lines = stderr.split('\n');
+
+  for (const line of lines) {
+    // Slang error format: filename(line): error code: message
+    // or: (line): error code: message
+    const match = line.match(/(?:\([^)]*\))?\((\d+)\):\s*(error|warning)\s*(\d+)?:\s*(.*)/i);
+    if (match) {
+      const lineNum = parseInt(match[1]) - lineOffset;
+      errors.push({
+        line: lineNum > 0 ? lineNum : 1,
+        type: match[2].toLowerCase(),
+        code: match[3] || '',
+        message: match[4].trim()
+      });
+    }
+  }
+
+  return errors;
+}
+
+// Clean up Slang HLSL output to make it more readable
+function cleanupSlangHlslOutput(hlslCode) {
+  let code = hlslCode;
+
+  // Remove preprocessor pragmas and NVAPI includes
+  code = code.replace(/#pragma pack_matrix\(column_major\)\s*/g, '');
+  code = code.replace(/#ifdef SLANG_HLSL_ENABLE_NVAPI[\s\S]*?#endif\s*/g, '');
+  code = code.replace(/#ifndef __DXC_VERSION_MAJOR[\s\S]*?#endif\s*/g, '');
+
+  // Remove any remaining #line directives (should be gone with -line-directive-mode none)
+  code = code.replace(/^#line\s+\d+.*$/gm, '');
+
+  // Clean up the cbuffer/struct - rename GlobalParams_0 to Uniforms
+  code = code.replace(/GlobalParams_0/g, 'Uniforms');
+  code = code.replace(/globalParams_0\./g, '');
+
+  // Clean up uniform names - remove _0 suffix
+  code = code.replace(/uResolution_0/g, 'iResolution');
+  code = code.replace(/uTime_0/g, 'iTime');
+  code = code.replace(/uTimeDelta_0/g, 'iTimeDelta');
+  code = code.replace(/uFrame_0/g, 'iFrame');
+  code = code.replace(/uFrameRate_0/g, 'iFrameRate');
+
+  // Clean up input struct names
+  code = code.replace(/VSInput_0/g, 'VSInput');
+  code = code.replace(/input_0\./g, 'input.');
+  code = code.replace(/input_0(?!\w)/g, 'input');
+
+  // Clean up member names in input struct
+  code = code.replace(/uv_0/g, 'uv');
+  code = code.replace(/normal_0/g, 'normal');
+  code = code.replace(/position_0/g, 'position');
+
+  // Clean up generated temporary variable names like _S1, _S2 -> t1, t2
+  code = code.replace(/_S(\d+)/g, 't$1');
+
+  // Remove excessive empty lines
+  code = code.replace(/\n{3,}/g, '\n\n');
+
+  // Remove leading/trailing whitespace
+  code = code.trim();
+
+  return code;
+}
+
+// Clean up Slang WGSL output
+function cleanupSlangWgslOutput(wgslCode) {
+  let code = wgslCode;
+
+  // Clean up uniform buffer names
+  code = code.replace(/globalParams_0\./g, '');
+  code = code.replace(/uResolution_0/g, 'iResolution');
+  code = code.replace(/uTime_0/g, 'iTime');
+  code = code.replace(/uTimeDelta_0/g, 'iTimeDelta');
+  code = code.replace(/uFrame_0/g, 'iFrame');
+  code = code.replace(/uFrameRate_0/g, 'iFrameRate');
+
+  // Clean up input names
+  code = code.replace(/input_0\./g, 'input.');
+  code = code.replace(/_S(\d+)/g, 't$1');
+
+  return code.trim();
+}
+
+// Clean up Slang Metal output
+function cleanupSlangMetalOutput(metalCode) {
+  let code = metalCode;
+
+  // Clean up uniform names
+  code = code.replace(/globalParams_0->/g, '');
+  code = code.replace(/globalParams_0\./g, '');
+  code = code.replace(/uResolution_0/g, 'iResolution');
+  code = code.replace(/uTime_0/g, 'iTime');
+  code = code.replace(/uTimeDelta_0/g, 'iTimeDelta');
+  code = code.replace(/uFrame_0/g, 'iFrame');
+  code = code.replace(/uFrameRate_0/g, 'iFrameRate');
+
+  // Clean up input names
+  code = code.replace(/input_0\./g, 'input.');
+  code = code.replace(/_S(\d+)/g, 't$1');
+
+  return code.trim();
+}
+
+// Clean up spirv-cross GLSL ES output for ShaderToy compatibility
+function cleanupSlangGlslOutput(glslCode, mode = 'materialLibrary') {
+  let code = glslCode;
+
+  // Remove #version directive
+  code = code.replace(/#version\s+\d+.*\r?\n?/g, '');
+
+  // Remove precision declarations
+  code = code.replace(/precision\s+(lowp|mediump|highp)\s+(float|int)\s*;\s*\r?\n?/g, '');
+
+  // Remove the GlobalParams_std140 struct definition
+  code = code.replace(/struct\s+GlobalParams_std140\s*\{[^}]*\}\s*;\s*/gs, '');
+
+  // Remove the uniform struct instance declaration
+  code = code.replace(/uniform\s+GlobalParams_std140\s+globalParams\s*;\s*/g, '');
+
+  // Remove varying declarations (we'll set them up in mainImage)
+  code = code.replace(/varying\s+highp\s+vec2\s+input_uv\s*;\s*/g, '');
+  code = code.replace(/varying\s+highp\s+vec3\s+input_normal\s*;\s*/g, '');
+  code = code.replace(/varying\s+highp\s+vec3\s+input_position\s*;\s*/g, '');
+
+  // Map spirv-cross uniform references to ShaderToy-style names
+  code = code.replace(/globalParams\.uResolution/g, 'iResolution');
+  code = code.replace(/globalParams\.uTime/g, 'iTime');
+  code = code.replace(/globalParams\.uTimeDelta/g, 'iTimeDelta');
+  code = code.replace(/globalParams\.uFrame/g, 'iFrame');
+  code = code.replace(/globalParams\.uFrameRate/g, 'iFrameRate');
+
+  // Map input varyings to readable names
+  code = code.replace(/\binput_uv\b/g, 'uv');
+  code = code.replace(/\binput_normal\b/g, 'normal');
+  code = code.replace(/\binput_position\b/g, 'position');
+
+  // Map gl_FragData[0] to fragColor
+  code = code.replace(/gl_FragData\s*\[\s*0\s*\]/g, 'fragColor');
+
+  // Remove highp qualifiers for cleaner output
+  code = code.replace(/\bhighp\s+/g, '');
+
+  // Convert infinite loop pattern for(;;) to standard loop
+  code = code.replace(/for\s*\(\s*;\s*;\s*\)/g, 'for(int _loopIdx = 0; _loopIdx < 10000; _loopIdx++)');
+
+  // Extract main() body content
+  const mainMatch = code.match(/void\s+main\s*\(\s*\)\s*\{([\s\S]*)\}/);
+  if (!mainMatch) {
+    // If no main() found, return cleaned code as-is
+    return code.trim();
+  }
+
+  let mainBody = mainMatch[1];
+
+  // Clean up indentation - remove one level
+  mainBody = mainBody.split('\n').map(line => {
+    if (line.startsWith('    ')) {
+      return line.substring(4);
+    }
+    return line;
+  }).join('\n');
+
+  // Build the ShaderToy-compatible output
+  let result = '';
+
+  if (mode === 'shaderToy') {
+    // ShaderToy mode - wrap in mainImage with 2D fallbacks
+    result = `void mainImage(out vec4 fragColor, in vec2 fragCoord)
+{
+    // Convert pixel coordinates to UV (0-1 range)
+    vec2 uv = fragCoord / iResolution.xy;
+
+    // Fake 3D inputs for 2D ShaderToy context
+    vec3 normal = vec3(0.0, 0.0, 1.0);
+    vec3 position = vec3(uv, 0.0);
+
+${mainBody}
+}`;
+  } else {
+    // Material Library mode - clean standalone function
+    result = `// Uniforms: iResolution, iTime, iTimeDelta, iFrame, iFrameRate
+// Inputs: uv (vec2), normal (vec3), position (vec3)
+// Output: fragColor (vec4)
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord)
+{
+    vec2 uv = fragCoord / iResolution.xy;
+    vec3 normal = vec3(0.0, 0.0, 1.0);
+    vec3 position = vec3(uv, 0.0);
+
+${mainBody}
+}`;
+  }
+
+  // Clean up multiple empty lines
+  result = result.replace(/\r\n/g, '\n');
+  result = result.replace(/\n{3,}/g, '\n\n');
+
+  return result.trim();
+}
+
+// Slang compilation endpoint
+app.post('/api/slang/compile', async (req, res) => {
+  const {
+    source,
+    target = 'glsl',
+    mode = 'materialLibrary',
+    entryPoint = 'fragmentMain',
+    stage = 'fragment',
+    forExport = false
+  } = req.body;
+
+  if (!source) {
+    return res.status(400).json({ success: false, error: 'No source code provided' });
+  }
+
+  // Validate target
+  const validTargets = ['glsl', 'hlsl', 'spirv', 'wgsl', 'metal'];
+  if (!validTargets.includes(target)) {
+    return res.status(400).json({
+      success: false,
+      error: `Invalid target: ${target}. Valid targets: ${validTargets.join(', ')}`
+    });
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'slang-'));
+  const slangFile = path.join(tempDir, 'shader.slang');
+
+  // Determine output extension based on target
+  const outputExtensions = {
+    glsl: 'glsl',
+    hlsl: 'hlsl',
+    spirv: 'spv',
+    wgsl: 'wgsl',
+    metal: 'metal'
+  };
+  const outputFile = path.join(tempDir, `shader.${outputExtensions[target]}`);
+
+  // Line offset for error messages (user code starts at different lines based on mode)
+  const lineOffset = mode === 'shaderToy' ? 28 : 36;
+
+  try {
+    // Wrap user code based on mode
+    const fullShaderCode = mode === 'shaderToy'
+      ? wrapUserCodeForSlangShaderToy(source)
+      : wrapUserCodeForSlang(source);
+
+    fs.writeFileSync(slangFile, fullShaderCode);
+
+    // For GLSL target, use SPIR-V + spirv-cross pipeline for better ES compatibility
+    const useSpirVCrossPipeline = (target === 'glsl');
+    const slangTarget = useSpirVCrossPipeline ? 'spirv' : target;
+    const slangOutputFile = useSpirVCrossPipeline
+      ? path.join(tempDir, 'shader.spv')
+      : outputFile;
+
+    // Build slangc command arguments
+    const args = [
+      slangFile,
+      '-target', slangTarget,
+      '-entry', entryPoint,
+      '-stage', stage,
+      '-o', slangOutputFile
+    ];
+
+    // Add target-specific options
+    if (target === 'hlsl') {
+      args.push('-profile', 'sm_5_0');
+    }
+
+    // Remove #line directives for cleaner output
+    args.push('-line-directive-mode', 'none');
+
+    // Execute Slang compiler
+    try {
+      execFileSync(SLANG_PATH, args, {
+        timeout: 30000,
+        maxBuffer: 1024 * 1024
+      });
+    } catch (slangError) {
+      const stderr = slangError.stderr ? slangError.stderr.toString() : slangError.message;
+      const errors = parseSlangErrors(stderr, lineOffset);
+
+      return res.status(400).json({
+        success: false,
+        error: errors.length > 0 ? errors[0].message : stderr,
+        errors: errors,
+        stage: 'slang-compilation'
+      });
+    }
+
+    // For GLSL, run spirv-cross to convert SPIR-V to GLSL ES
+    if (useSpirVCrossPipeline) {
+      try {
+        const spirvCrossArgs = [
+          slangOutputFile,
+          '--version', '100',
+          '--es',
+          '--output', outputFile
+        ];
+        execFileSync(SPIRV_CROSS_PATH, spirvCrossArgs, {
+          timeout: 30000,
+          maxBuffer: 1024 * 1024
+        });
+      } catch (spirvCrossError) {
+        const stderr = spirvCrossError.stderr ? spirvCrossError.stderr.toString() : spirvCrossError.message;
+        return res.status(400).json({
+          success: false,
+          error: `spirv-cross error: ${stderr}`,
+          stage: 'spirv-cross'
+        });
+      }
+    }
+
+    // Read compiled output
+    let compiledCode;
+    if (target === 'spirv') {
+      // For SPIR-V, return base64 encoded binary
+      const spirvBinary = fs.readFileSync(outputFile);
+      compiledCode = spirvBinary.toString('base64');
+    } else {
+      compiledCode = fs.readFileSync(outputFile, 'utf-8');
+
+      // Apply cleanup based on target for better readability (only for export)
+      if (forExport) {
+        if (target === 'hlsl') {
+          compiledCode = cleanupSlangHlslOutput(compiledCode);
+        } else if (target === 'wgsl') {
+          compiledCode = cleanupSlangWgslOutput(compiledCode);
+        } else if (target === 'metal') {
+          compiledCode = cleanupSlangMetalOutput(compiledCode);
+        } else if (target === 'glsl') {
+          compiledCode = cleanupSlangGlslOutput(compiledCode, mode);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      code: compiledCode,
+      target: target,
+      mode: mode
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    // Cleanup temp files
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+  }
+});
+
+// Slang version/health check endpoint
+app.get('/api/slang/version', (req, res) => {
+  try {
+    // slangc doesn't have --version, so we just check if it's available
+    execFileSync(SLANG_PATH, ['-h'], { timeout: 5000, maxBuffer: 1024 * 1024 });
+    res.json({
+      available: true,
+      path: SLANG_PATH,
+      targets: ['glsl', 'hlsl', 'spirv', 'wgsl', 'metal']
+    });
+  } catch (e) {
+    // -h returns non-zero but still works if available
+    if (e.stdout || e.stderr) {
+      res.json({
+        available: true,
+        path: SLANG_PATH,
+        targets: ['glsl', 'hlsl', 'spirv', 'wgsl', 'metal']
+      });
+    } else {
+      res.json({ available: false, error: 'Slang compiler not found' });
+    }
+  }
+});
+
+// List available compilation targets
+app.get('/api/slang/targets', (req, res) => {
+  res.json({
+    targets: [
+      { id: 'glsl', name: 'GLSL', description: 'OpenGL Shading Language (WebGL/OpenGL)' },
+      { id: 'hlsl', name: 'HLSL', description: 'High-Level Shading Language (DirectX)' },
+      { id: 'spirv', name: 'SPIR-V', description: 'Standard Portable Intermediate Representation (Vulkan)' },
+      { id: 'wgsl', name: 'WGSL', description: 'WebGPU Shading Language' },
+      { id: 'metal', name: 'Metal', description: 'Metal Shading Language (Apple)' }
+    ]
+  });
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Shader conversion server running on port ${PORT}`);
   console.log(`Using glslangValidator: ${GLSLANG_PATH}`);
   console.log(`Using spirv-cross: ${SPIRV_CROSS_PATH}`);
+  console.log(`Using slangc: ${SLANG_PATH}`);
 });

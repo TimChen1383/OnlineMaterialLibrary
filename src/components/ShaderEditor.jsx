@@ -1,6 +1,6 @@
 import Editor from '@monaco-editor/react'
 
-export default function ShaderEditor({ value, onChange, language = 'glsl' }) {
+export default function ShaderEditor({ value, onChange, language = 'glsl', onKeyDown }) {
   const handleEditorMount = (editor, monaco) => {
     // Register GLSL language if not already registered
     if (!monaco.languages.getLanguages().some(lang => lang.id === 'glsl')) {
@@ -28,12 +28,85 @@ export default function ShaderEditor({ value, onChange, language = 'glsl' }) {
         }
       })
     }
+
+    // Register Slang language if not already registered
+    if (!monaco.languages.getLanguages().some(lang => lang.id === 'slang')) {
+      monaco.languages.register({ id: 'slang' })
+      monaco.languages.setMonarchTokensProvider('slang', {
+        tokenizer: {
+          root: [
+            // Comments
+            [/\/\/.*$/, 'comment'],
+            [/\/\*/, 'comment', '@comment'],
+
+            // Slang-specific attributes
+            [/\[shader\s*\(\s*"[^"]*"\s*\)\]/, 'annotation'],
+            [/\[numthreads\s*\([^\)]*\)\]/, 'annotation'],
+            [/\[[a-zA-Z_]\w*(?:\s*\([^\)]*\))?\]/, 'annotation'],
+
+            // Types - HLSL/Slang style
+            [/\b(void|bool|int|uint|float|double|half|min16float|min10float|min16int|min12int|min16uint)\b/, 'type'],
+            [/\b(float[1234]|int[1234]|uint[1234]|bool[1234]|half[1234])\b/, 'type'],
+            [/\b(float[1234]x[1234]|int[1234]x[1234]|uint[1234]x[1234]|half[1234]x[1234])\b/, 'type'],
+            [/\b(Texture[123]D|Texture2DArray|TextureCube|Texture2DMS|RWTexture[123]D)\b/, 'type'],
+            [/\b(SamplerState|SamplerComparisonState)\b/, 'type'],
+            [/\b(StructuredBuffer|RWStructuredBuffer|ByteAddressBuffer|RWByteAddressBuffer)\b/, 'type'],
+            [/\b(ConstantBuffer|AppendStructuredBuffer|ConsumeStructuredBuffer)\b/, 'type'],
+
+            // Keywords
+            [/\b(const|static|uniform|extern|volatile|inline|precise|groupshared)\b/, 'keyword'],
+            [/\b(in|out|inout|ref)\b/, 'keyword'],
+            [/\b(break|continue|do|for|while|switch|case|default|if|else|return|discard)\b/, 'keyword'],
+            [/\b(struct|class|interface|extension|typedef|enum|namespace)\b/, 'keyword'],
+            [/\b(import|module|public|private|internal|export|__generic|This|associatedtype)\b/, 'keyword'],
+            [/\b(cbuffer|tbuffer|register|packoffset)\b/, 'keyword'],
+            [/\b(true|false)\b/, 'keyword'],
+
+            // Semantics
+            [/:\s*(SV_Target|SV_Position|SV_Depth|SV_VertexID|SV_InstanceID|SV_IsFrontFace|SV_PrimitiveID|SV_DispatchThreadID|SV_GroupID|SV_GroupIndex|SV_GroupThreadID)\b/i, 'type.identifier'],
+            [/:\s*(POSITION|NORMAL|TEXCOORD|COLOR|TANGENT|BINORMAL|BLENDWEIGHT|BLENDINDICES)[0-9]*/i, 'type.identifier'],
+
+            // Built-in functions - common
+            [/\b(abs|acos|all|any|asin|atan|atan2|ceil|clamp|clip|cos|cosh|cross|ddx|ddy|degrees|determinant|distance|dot|exp|exp2|faceforward|floor|fmod|frac|frexp|fwidth|isfinite|isinf|isnan|ldexp|length|lerp|lit|log|log10|log2|mad|max|min|modf|mul|normalize|pow|radians|rcp|reflect|refract|round|rsqrt|saturate|sign|sin|sincos|sinh|smoothstep|sqrt|step|tan|tanh|tex1D|tex2D|tex3D|texCUBE|transpose|trunc)\b/, 'function'],
+
+            // Pre-defined variables (from our wrapper)
+            [/\b(iResolution|iTime|iTimeDelta|iFrame|iFrameRate|iUV|iNormal|iPosition|fragColor)\b/, 'variable.predefined'],
+
+            // Numbers
+            [/\b\d+\.?\d*([eE][-+]?\d+)?[fFhHlL]?\b/, 'number'],
+            [/\b0[xX][0-9a-fA-F]+[uUlL]*\b/, 'number.hex'],
+            [/\b\d+[uUlL]*\b/, 'number'],
+
+            // Preprocessor
+            [/#\s*(define|undef|if|ifdef|ifndef|else|elif|endif|error|pragma|include|line)\b/, 'keyword.directive'],
+
+            // Identifiers
+            [/[a-zA-Z_]\w*/, 'identifier'],
+          ],
+          comment: [
+            [/[^\/*]+/, 'comment'],
+            [/\*\//, 'comment', '@pop'],
+            [/[\/*]/, 'comment']
+          ],
+        }
+      })
+    }
+
+    // Add Ctrl+Enter keybinding for compile
+    if (onKeyDown) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+        onKeyDown({ ctrlKey: true, key: 'Enter' })
+      })
+    }
   }
+
+  // Determine which language to use
+  const editorLanguage = language === 'slang' ? 'slang' : 'glsl'
 
   return (
     <Editor
       height="100%"
-      language="glsl"
+      language={editorLanguage}
       theme="vs-dark"
       value={value}
       onChange={onChange}

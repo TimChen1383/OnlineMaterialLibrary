@@ -15,7 +15,9 @@
       "Bash(node:*)",
       "Bash(timeout /t 2 /nobreak)",
       "Bash(curl:*)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(slangc:*)",
+      "Bash(findstr:*)"
     ]
   }
 }
