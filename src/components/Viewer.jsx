@@ -17,88 +17,6 @@ void main() {
 }
 `
 
-// Wrap user code into a complete fragment shader (Material Library mode)
-function wrapUserCode(userCode) {
-  return `
-precision highp float;
-
-uniform vec2 uResolution;
-uniform float uTime;
-uniform float uTimeDelta;
-uniform float uFrame;
-uniform float uFrameRate;
-
-varying vec2 vUv;
-varying vec3 vNormal;
-varying vec3 vPosition;
-
-void main() {
-  // Pre-defined variables for user convenience (aligned with ShaderToy naming)
-  vec2 iResolution = uResolution;
-  float iTime = uTime;
-  float iTimeDelta = uTimeDelta;
-  float iFrame = uFrame;
-  float iFrameRate = uFrameRate;
-  vec2 iUV = vUv;
-  vec3 iNormal = vNormal;
-  vec3 iPosition = vPosition;
-
-  // Default output (vec4 RGBA)
-  vec4 fragColor = vec4(1.0);
-
-  // ---- USER CODE START ----
-  ${userCode}
-  // ---- USER CODE END ----
-
-  gl_FragColor = fragColor;
-}
-`
-}
-
-// Wrap user code for ShaderToy compatibility mode
-function wrapUserCodeShaderToy(userCode) {
-  return `
-precision highp float;
-
-uniform vec2 uResolution;
-uniform float uTime;
-uniform float uTimeDelta;
-uniform float uFrame;
-uniform float uFrameRate;
-
-varying vec2 vUv;
-
-// ShaderToy compatible uniforms
-vec3 iResolution;
-float iTime;
-float iTimeDelta;
-float iFrame;
-float iFrameRate;
-
-// ---- USER CODE START ----
-${userCode}
-// ---- USER CODE END ----
-
-void main() {
-  // Initialize ShaderToy uniforms
-  iResolution = vec3(uResolution, 1.0);
-  iTime = uTime;
-  iTimeDelta = uTimeDelta;
-  iFrame = uFrame;
-  iFrameRate = uFrameRate;
-
-  // Calculate fragCoord from UV (ShaderToy uses pixel coordinates)
-  vec2 fragCoord = vUv * uResolution;
-
-  // Call user's mainImage function
-  vec4 fragColor = vec4(0.0);
-  mainImage(fragColor, fragCoord);
-
-  gl_FragColor = fragColor;
-}
-`
-}
-
 // Convert spirv-cross GLSL ES output to WebGL-compatible GLSL
 function convertSlangGlslToWebGL(glslEsCode) {
   let code = glslEsCode
@@ -152,36 +70,7 @@ uniform float uFrameRate;
   return code.trim()
 }
 
-// Check for unsupported ShaderToy parameters
-function checkUnsupportedShaderToyParams(userCode) {
-  const unsupportedParams = []
-
-  if (/\biMouse\b/.test(userCode)) {
-    unsupportedParams.push('iMouse (mouse input not supported)')
-  }
-  if (/\biDate\b/.test(userCode)) {
-    unsupportedParams.push('iDate (date input not supported)')
-  }
-  if (/\biSampleRate\b/.test(userCode)) {
-    unsupportedParams.push('iSampleRate (audio not supported)')
-  }
-  if (/\biChannelResolution\b/.test(userCode)) {
-    unsupportedParams.push('iChannelResolution (texture channels not supported)')
-  }
-  if (/\biChannelTime\b/.test(userCode)) {
-    unsupportedParams.push('iChannelTime (texture channels not supported)')
-  }
-  if (/\biChannel\d\b/.test(userCode)) {
-    unsupportedParams.push('iChannel0-3 (texture inputs not supported)')
-  }
-  if (/\btexture\s*\(/.test(userCode)) {
-    unsupportedParams.push('texture() (texture sampling not supported)')
-  }
-
-  return unsupportedParams
-}
-
-function ShaderMesh({ meshType, userCode, shaderRule, onError, isSlangMode, slangCompiled }) {
+function ShaderMesh({ meshType, userCode, onError, slangCompiled }) {
   const meshRef = useRef()
   const materialRef = useRef()
   const { gl } = useThree()
@@ -209,39 +98,16 @@ function ShaderMesh({ meshType, userCode, shaderRule, onError, isSlangMode, slan
   }, [uniforms])
 
   const material = useMemo(() => {
-    // In Slang mode, check if we have compiled code
-    if (isSlangMode && !userCode) {
+    // Check if we have compiled code
+    if (!userCode) {
       // No compiled code yet - show placeholder
       onError('Click "Compile" to preview shader (Ctrl+Enter)')
       return new THREE.MeshBasicMaterial({ color: 0x1a1a2e })
     }
 
-    // Check for unsupported parameters in ShaderToy mode (only for GLSL mode)
-    let warnings = []
-    if (!isSlangMode && shaderRule === 'shadertoy') {
-      warnings = checkUnsupportedShaderToyParams(userCode)
-    }
-
-    let fragmentShader
-    let lineOffset = 0
-
-    if (isSlangMode) {
-      // In Slang mode, userCode is already the compiled GLSL from server
-      // We need to convert it from GLSL 450 to WebGL-compatible GLSL
-      fragmentShader = convertSlangGlslToWebGL(userCode)
-      // No line offset adjustment needed - errors are handled by the server
-      lineOffset = 0
-    } else {
-      // Use appropriate wrapper based on shader rule
-      fragmentShader = shaderRule === 'shadertoy'
-        ? wrapUserCodeShaderToy(userCode)
-        : wrapUserCode(userCode)
-
-      // Line offset depends on the wrapper used
-      // Material Library: user code starts at line 29 (offset 28)
-      // ShaderToy: user code starts at line 20 (offset 19)
-      lineOffset = shaderRule === 'shadertoy' ? 19 : 28
-    }
+    // userCode is already the compiled GLSL from server
+    // We need to convert it from GLSL 450 to WebGL-compatible GLSL
+    const fragmentShader = convertSlangGlslToWebGL(userCode)
 
     // Manually compile shader to check for errors
     const glContext = gl.getContext()
@@ -254,30 +120,18 @@ function ShaderMesh({ meshType, userCode, shaderRule, onError, isSlangMode, slan
     glContext.deleteShader(shader)
 
     if (!success && log) {
-      // Parse error message to adjust line numbers
+      // Parse error message
       let errorMsg = log
       const lineMatch = log.match(/ERROR: \d+:(\d+):(.*)/)
       if (lineMatch) {
-        const line = parseInt(lineMatch[1]) - lineOffset
         const msg = lineMatch[2].trim()
-        errorMsg = isSlangMode
-          ? `WebGL Error: ${msg}`
-          : `Line ${line > 0 ? line : '?'}: ${msg}`
-      }
-      // Prepend warnings if any
-      if (warnings.length > 0) {
-        errorMsg = `Warning: Unsupported parameters - ${warnings.join(', ')}\n${errorMsg}`
+        errorMsg = `WebGL Error: ${msg}`
       }
       onError(errorMsg)
       return new THREE.MeshBasicMaterial({ color: 0x331111 })
     }
 
-    // Show warnings even if compilation succeeds
-    if (warnings.length > 0) {
-      onError(`Warning: Unsupported parameters - ${warnings.join(', ')}`)
-    } else {
-      onError(null)
-    }
+    onError(null)
 
     return new THREE.ShaderMaterial({
       uniforms,
@@ -285,7 +139,7 @@ function ShaderMesh({ meshType, userCode, shaderRule, onError, isSlangMode, slan
       fragmentShader,
       side: THREE.DoubleSide
     })
-  }, [userCode, shaderRule, uniforms, onError, gl, isSlangMode, slangCompiled])
+  }, [userCode, uniforms, onError, gl, slangCompiled])
 
   useFrame((state) => {
     if (materialRef.current && materialRef.current.uniforms) {
@@ -344,16 +198,14 @@ function FpsTracker({ onFpsUpdate }) {
   return null
 }
 
-export default function Viewer({ meshType, userCode, shaderRule, onError, onFpsUpdate, isSlangMode, slangCompiled }) {
+export default function Viewer({ meshType, userCode, onError, onFpsUpdate, slangCompiled }) {
   return (
     <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
       <color attach="background" args={['#0a0a0f']} />
       <ShaderMesh
         meshType={meshType}
         userCode={userCode}
-        shaderRule={shaderRule}
         onError={onError}
-        isSlangMode={isSlangMode}
         slangCompiled={slangCompiled}
       />
       <OrbitControls enableDamping dampingFactor={0.05} />
@@ -362,5 +214,5 @@ export default function Viewer({ meshType, userCode, shaderRule, onError, onFpsU
   )
 }
 
-// Export for use in ExportModal
-export { VERTEX_SHADER, wrapUserCode }
+// Export VERTEX_SHADER for potential external use
+export { VERTEX_SHADER }

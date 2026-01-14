@@ -76,35 +76,20 @@ body {
   gap: 15px;
 }
 
-.rule-selector {
+/* Slang Logo */
+.slang-logo-container {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.rule-selector label {
-  font-size: 12px;
-  color: #888;
-}
-
-.rule-selector select {
-  padding: 5px 10px;
-  background: #1a1a2e;
-  border: 1px solid #333;
-  color: #eee;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.rule-selector select:hover {
-  border-color: #e94560;
-}
-
-.rule-selector select:focus {
-  border-color: #e94560;
+.slang-logo {
+  height: 24px;
+  width: auto;
+  object-fit: contain;
 }
 
 .editor-tabs {
@@ -481,10 +466,7 @@ body {
 .shader-preview {
   aspect-ratio: 4 / 3;
   background: #0a0a0f;
-}
-
-.shader-preview canvas {
-  display: block;
+  overflow: hidden;
 }
 
 .shader-info {

@@ -9,7 +9,8 @@ export const shaders = Object.entries(shaderModules).map(([path, code]) => {
   return {
     id: filename.toLowerCase().replace(/\s+/g, '-'),
     name: filename,
-    code: code.trim()
+    code: code.trim(),
+    thumbnail: `/images/thumbnails/${filename}.png`
   }
 })
 

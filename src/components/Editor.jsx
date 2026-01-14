@@ -5,35 +5,7 @@ import ShaderEditor from './ShaderEditor'
 import ExportModal from './ExportModal'
 import { getShaderById } from '../shaders'
 import { compileSlang, isSlangAvailable } from '../utils/shaderApi'
-
-// Default GLSL code - simple starter template
-const DEFAULT_GLSL_CODE = `/*Pre-defined Variables
-vec2 iResolution (Screen size in pixels)
-float iTime (Current time in seconds)
-float iTimeDelta (Time to render a frame, in seconds)
-float iFrame (Current frame)
-float iFrameRate (Frames rendered per second)
-vec2 iUV (Texture coordinates)
-vec3 iNormal (Surface normal)
-vec3 iPosition (Vertex position in local space)
-*/
-
-/*Output Variable
-vec4 fragColor (The RGBA color output)
-*/
-
-// Simple gradient based on UV
-vec3 color = vec3(iUV.x, iUV.y, 0.5);
-
-// Animate with time
-color.r = sin(iTime) * 0.5 + 0.5;
-
-// Use normal for basic lighting
-float light = dot(iNormal, normalize(vec3(1.0, 1.0, 1.0)));
-color *= light;
-
-// Output (required)
-fragColor = vec4(color, 1.0);`
+import slangLogo from '../img/Slang_logo.png'
 
 // Default Slang code - simple starter template
 const DEFAULT_SLANG_CODE = `/*Pre-defined Variables (Slang/HLSL style)
@@ -81,10 +53,8 @@ export default function Editor() {
   const [error, setError] = useState(null)
   const [showExport, setShowExport] = useState(false)
   const [fps, setFps] = useState(0)
-  const [shaderRule, setShaderRule] = useState('material-library')
 
-  // Slang-specific state
-  const [shaderLanguage, setShaderLanguage] = useState('slang') // 'glsl' or 'slang'
+  // Slang compilation state
   const [compileStatus, setCompileStatus] = useState(CompileStatus.READY)
   const [compiledGlsl, setCompiledGlsl] = useState(null) // Compiled GLSL from Slang
   const [slangAvailable, setSlangAvailable] = useState(false)
@@ -107,8 +77,6 @@ export default function Editor() {
       if (shader) {
         setUserCode(shader.code)
         setShaderName(shader.name)
-        // Library shaders are now Slang
-        setShaderLanguage('slang')
         setCompileStatus(CompileStatus.READY)
         setCompiledGlsl(null)
         setIsDirty(true)
@@ -121,7 +89,6 @@ export default function Editor() {
   // Auto-compile on initial load when Slang is available
   useEffect(() => {
     if (!hasInitiallyCompiled.current &&
-        shaderLanguage === 'slang' &&
         slangAvailable &&
         compileStatus === CompileStatus.READY &&
         isDirty) {
@@ -129,42 +96,19 @@ export default function Editor() {
       handleCompile()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slangAvailable, shaderLanguage, isDirty, compileStatus])
-
-  // Handle language switch
-  const handleLanguageChange = (newLanguage) => {
-    if (newLanguage === shaderLanguage) return
-
-    // Switch to appropriate default code
-    if (newLanguage === 'slang') {
-      setUserCode(DEFAULT_SLANG_CODE)
-      setCompiledGlsl(null)
-      setCompileStatus(CompileStatus.READY)
-      setIsDirty(true)
-    } else {
-      setUserCode(DEFAULT_GLSL_CODE)
-      setCompiledGlsl(null)
-      setCompileStatus(CompileStatus.COMPILED)
-      setIsDirty(false)
-    }
-    setShaderLanguage(newLanguage)
-    setError(null)
-  }
+  }, [slangAvailable, isDirty, compileStatus])
 
   // Handle code changes
   const handleCodeChange = (value) => {
     setUserCode(value || '')
-    if (shaderLanguage === 'slang') {
-      setIsDirty(true)
-      if (compileStatus === CompileStatus.COMPILED || compileStatus === CompileStatus.ERROR) {
-        setCompileStatus(CompileStatus.READY)
-      }
+    setIsDirty(true)
+    if (compileStatus === CompileStatus.COMPILED || compileStatus === CompileStatus.ERROR) {
+      setCompileStatus(CompileStatus.READY)
     }
   }
 
   // Compile Slang code
   const handleCompile = async () => {
-    if (shaderLanguage !== 'slang') return
     if (compileStatus === CompileStatus.COMPILING) return
 
     setCompileStatus(CompileStatus.COMPILING)
@@ -173,7 +117,7 @@ export default function Editor() {
     try {
       const result = await compileSlang(userCode, {
         target: 'glsl',
-        mode: shaderRule === 'shadertoy' ? 'shaderToy' : 'materialLibrary'
+        mode: 'materialLibrary'
       })
 
       setCompiledGlsl(result.code)
@@ -226,56 +170,29 @@ export default function Editor() {
             <h2>{shaderName}</h2>
           </div>
           <div className="editor-options">
-            {/* Language Selector */}
-            <div className="language-selector">
-              <button
-                className={`lang-btn ${shaderLanguage === 'glsl' ? 'active' : ''}`}
-                onClick={() => handleLanguageChange('glsl')}
-              >
-                GLSL
-              </button>
-              <button
-                className={`lang-btn ${shaderLanguage === 'slang' ? 'active' : ''}`}
-                onClick={() => handleLanguageChange('slang')}
-                disabled={!slangAvailable}
-                title={slangAvailable ? 'Switch to Slang' : 'Slang compiler not available'}
-              >
-                Slang
-              </button>
+            {/* Slang Logo */}
+            <div className="slang-logo-container">
+              <img src={slangLogo} alt="Slang" className="slang-logo" />
             </div>
 
-            {/* Compile Button (only for Slang) */}
-            {shaderLanguage === 'slang' && (
-              <button
-                className={compileButton.className}
-                onClick={handleCompile}
-                disabled={compileStatus === CompileStatus.COMPILING}
-                title="Compile Slang to GLSL (Ctrl+Enter)"
-              >
-                {compileStatus === CompileStatus.COMPILING && (
-                  <span className="spinner"></span>
-                )}
-                {compileButton.text}
-              </button>
-            )}
-
-            <div className="rule-selector">
-              <label>Rule:</label>
-              <select
-                value={shaderRule}
-                onChange={(e) => setShaderRule(e.target.value)}
-              >
-                <option value="material-library">Material Library</option>
-                <option value="shadertoy">ShaderToy</option>
-              </select>
-            </div>
+            {/* Compile Button */}
+            <button
+              className={compileButton.className}
+              onClick={handleCompile}
+              disabled={compileStatus === CompileStatus.COMPILING || !slangAvailable}
+              title={slangAvailable ? "Compile Slang to GLSL (Ctrl+Enter)" : "Slang compiler not available"}
+            >
+              {compileStatus === CompileStatus.COMPILING && (
+                <span className="spinner"></span>
+              )}
+              {compileButton.text}
+            </button>
           </div>
         </div>
         <div className="editor-container">
           <ShaderEditor
             value={userCode}
             onChange={handleCodeChange}
-            language={shaderLanguage}
             onKeyDown={handleEditorKeyDown}
           />
         </div>
@@ -322,11 +239,9 @@ export default function Editor() {
         <div className="viewer-container">
           <Viewer
             meshType={meshType}
-            userCode={shaderLanguage === 'slang' ? compiledGlsl : userCode}
-            shaderRule={shaderRule}
+            userCode={compiledGlsl}
             onError={handleError}
             onFpsUpdate={setFps}
-            isSlangMode={shaderLanguage === 'slang'}
             slangCompiled={compileStatus === CompileStatus.COMPILED && !isDirty}
           />
         </div>
@@ -336,7 +251,6 @@ export default function Editor() {
       {showExport && (
         <ExportModal
           userCode={userCode}
-          shaderLanguage={shaderLanguage}
           onClose={() => setShowExport(false)}
         />
       )}

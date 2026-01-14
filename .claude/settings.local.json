@@ -17,7 +17,8 @@
       "Bash(curl:*)",
       "Bash(ping:*)",
       "Bash(slangc:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(python:*)"
     ]
   }
 }

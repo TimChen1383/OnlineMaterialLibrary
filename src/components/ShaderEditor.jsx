@@ -1,6 +1,6 @@
 import Editor from '@monaco-editor/react'
 
-export default function ShaderEditor({ value, onChange, language = 'glsl', onKeyDown }) {
+export default function ShaderEditor({ value, onChange, onKeyDown }) {
   const handleEditorMount = (editor, monaco) => {
     // Register GLSL language if not already registered
     if (!monaco.languages.getLanguages().some(lang => lang.id === 'glsl')) {
@@ -100,13 +100,10 @@ export default function ShaderEditor({ value, onChange, language = 'glsl', onKey
     }
   }
 
-  // Determine which language to use
-  const editorLanguage = language === 'slang' ? 'slang' : 'glsl'
-
   return (
     <Editor
       height="100%"
-      language={editorLanguage}
+      language="slang"
       theme="vs-dark"
       value={value}
       onChange={onChange}
