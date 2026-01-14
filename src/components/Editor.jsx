@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Viewer from './Viewer'
 import ShaderEditor from './ShaderEditor'
@@ -90,6 +90,9 @@ export default function Editor() {
   const [slangAvailable, setSlangAvailable] = useState(false)
   const [isDirty, setIsDirty] = useState(true) // Track if code changed since last compile
 
+  // Track if we've done the initial auto-compile (reset when loading new shader)
+  const hasInitiallyCompiled = useRef(false)
+
   // Check if Slang compiler is available on mount
   useEffect(() => {
     isSlangAvailable().then(result => {
@@ -109,9 +112,24 @@ export default function Editor() {
         setCompileStatus(CompileStatus.READY)
         setCompiledGlsl(null)
         setIsDirty(true)
+        // Reset auto-compile flag so new shader gets compiled automatically
+        hasInitiallyCompiled.current = false
       }
     }
   }, [id])
+
+  // Auto-compile on initial load when Slang is available
+  useEffect(() => {
+    if (!hasInitiallyCompiled.current &&
+        shaderLanguage === 'slang' &&
+        slangAvailable &&
+        compileStatus === CompileStatus.READY &&
+        isDirty) {
+      hasInitiallyCompiled.current = true
+      handleCompile()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slangAvailable, shaderLanguage, isDirty, compileStatus])
 
   // Handle language switch
   const handleLanguageChange = (newLanguage) => {
