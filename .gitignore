@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files (keep .env.local and .env.production templates)
+.env*.local
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmpclaude-*
+*.tmp
+*.temp
+
+# Logs
+*.log
+npm-debug.log*
+
+# Claude
+CLAUDE.md
