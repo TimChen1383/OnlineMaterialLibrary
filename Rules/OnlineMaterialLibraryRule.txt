@@ -1,3 +1,4 @@
+Shader language: Slang (Khronos)
 
 Pre-defined Variables
 - vec2 iResolution //Screen size in pixels
