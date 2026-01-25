@@ -17,7 +17,7 @@ It cludes features below:
 ***Shader Library***
 <img width="1902" height="886" alt="ShaderLibrary" src="https://github.com/user-attachments/assets/ab105995-6fbe-41fe-afdd-5eb89d892e5e" />
 
-***Code Editor***
+***Code Editor and Compiler***
 <img width="1919" height="902" alt="Editor" src="https://github.com/user-attachments/assets/c0e41219-45eb-4586-aad1-544fa49841ab" />
 
 ***Cross Platform Export***
