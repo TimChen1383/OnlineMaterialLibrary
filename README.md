@@ -11,6 +11,10 @@ It cludes features below:
 - ***Library*** : Storing ready to use materials as library on the platform
 - ***Sharing*** : Easy to share with other people
 
+
+***High-Level Architecture***
+<img width="858" height="252" alt="architecture" src="https://github.com/user-attachments/assets/89e871d2-2fda-497d-bcd2-f9e067e8b2f0" />
+
 ***Compiler***
 <img width="1265" height="710" alt="Slang" src="https://github.com/user-attachments/assets/6e1983ae-216f-45b2-92b0-3ac921fd6d23" />
 
