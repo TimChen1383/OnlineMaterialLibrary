@@ -22,7 +22,7 @@ It cludes features below:
 <img width="1885" height="901" alt="library" src="https://github.com/user-attachments/assets/7ae8cfbd-5527-4ade-b4a4-6220a13cff86" />
 
 ***Code Editor and Compiler***
-<img width="1919" height="902" alt="Editor" src="https://github.com/user-attachments/assets/c0e41219-45eb-4586-aad1-544fa49841ab" />
+![Edit](https://github.com/user-attachments/assets/ca72050f-ead7-42ad-9915-c76d5f7b6b82)
 
 ***Cross Platform Export***
-<img width="1917" height="913" alt="Export" src="https://github.com/user-attachments/assets/e757cd8f-1764-40e0-af2a-3411b7146229" />
+![Export](https://github.com/user-attachments/assets/71fccb05-28fe-494c-b5a0-862c9bd92948)
