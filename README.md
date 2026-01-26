@@ -1,5 +1,5 @@
 # OnlineMaterialLibrary (WIP. Temporary name)
-Due to the shader language and the node based design of the game engine, materials are hard to share across multiple platforms. Which means you can't see it on web browser, hard to shader with other people an the material can only be use in single platform like Unreal Engine.
+Due to the shader language and the node based design of the game engine, materials are hard to share across multiple platforms. Which means you can't see it on web browser, hard to share with other people and the material can only be use in single platform like Unreal Engine.
 
 This platform is based on Slang(https://shader-slang.org/), which supports multiple backend targets for portable code deployment across diverse APIs and platforms.
 It cludes features below:
