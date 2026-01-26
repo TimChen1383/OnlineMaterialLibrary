@@ -19,7 +19,9 @@ It cludes features below:
 <img width="1265" height="710" alt="Slang" src="https://github.com/user-attachments/assets/6e1983ae-216f-45b2-92b0-3ac921fd6d23" />
 
 ***Shader Library***
-<img width="1885" height="901" alt="library" src="https://github.com/user-attachments/assets/7ae8cfbd-5527-4ade-b4a4-6220a13cff86" />
+
+![Library](https://github.com/user-attachments/assets/13137c81-fe34-4755-8ceb-c69e94d59dcd)
+
 
 ***Code Editor and Compiler***
 
